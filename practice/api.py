@@ -1,10 +1,24 @@
-from ninja import Router
-from ninja import Schema
-from typing import List, Optional, Dict
+from ninja import Router, Schema
+from ninja.errors import HttpError
+from typing import List, Optional, Dict, Any
 from datetime import datetime, timedelta
 from enum import Enum
+import logging
+from django.contrib.auth.models import User
+from django.utils import timezone
+from django.db import transaction
+from django.db.models import Count, Avg, Q
+
+from .models import SRSCard
+from .sm2 import SM2Scheduler, SM2AdaptiveSelector
+from assessment.models import AdaptiveQuestion
 
 router = Router()
+logger = logging.getLogger(__name__)
+
+# Initialize SM-2 components
+sm2_scheduler = SM2Scheduler()
+sm2_selector = SM2AdaptiveSelector(sm2_scheduler)
 
 class CardStatus(str, Enum):
     NEW = "new"
@@ -18,285 +32,514 @@ class ReviewResult(str, Enum):
     GOOD = "good"        # Correct with some effort
     EASY = "easy"        # Very easy
 
-# SRS Schemas
-class FlashcardSchema(Schema):
-    id: Optional[int] = None
-    knowledge_component_id: int
-    front_content: str
-    back_content: str
-    difficulty: float
-    tags: List[str] = []
-    created_at: Optional[datetime] = None
+# ============================================================================
+# SM-2 Spaced Repetition System Schemas
+# ============================================================================
 
-class FlashcardCreateSchema(Schema):
-    knowledge_component_id: int
-    front_content: str
-    back_content: str
-    difficulty: float = 0.5
-    tags: List[str] = []
+class DueCardSchema(Schema):
+    """Schema for due cards in SM-2 system"""
+    card_id: str
+    question_id: str
+    question_text: str
+    question_type: str
+    stage: str
+    ease_factor: float
+    interval: int
+    repetition: int
+    due_date: datetime
+    last_reviewed: Optional[datetime]
+    correct_streak: int
+    total_reviews: int
+    success_rate: float
+    average_response_time: float
+    is_overdue: bool
+    priority_score: float
 
-class StudentCardSchema(Schema):
-    id: Optional[int] = None
-    student_id: int
-    flashcard_id: int
-    status: CardStatus
-    ease_factor: float = 2.5  # SM-2 algorithm parameter
-    interval: int = 1         # Days until next review
-    repetitions: int = 0      # Number of successful repetitions
-    next_review: datetime
-    last_reviewed: Optional[datetime] = None
+class DueCardsResponseSchema(Schema):
+    """Response schema for due cards endpoint"""
+    student_id: str
+    total_due: int
+    cards: List[DueCardSchema]
+    session_metadata: Dict[str, Any]
+    study_recommendations: List[str]
 
-class ReviewSessionSchema(Schema):
-    id: Optional[int] = None
-    student_id: int
-    cards_due: List[StudentCardSchema]
-    session_start: datetime
-    session_end: Optional[datetime] = None
-    cards_reviewed: int = 0
+class ReviewRequestSchema(Schema):
+    """Schema for review submission"""
+    card_id: str
+    quality: int  # SM-2 quality score (0-5)
+    response_time: float  # Response time in seconds
+    session_id: Optional[str] = None
 
-class CardReviewSchema(Schema):
-    student_card_id: int
-    result: ReviewResult
-    response_time: float  # in seconds
-    review_timestamp: datetime
-
-class SubmitReviewSchema(Schema):
-    student_card_id: int
-    result: ReviewResult
-    response_time: float
+class ReviewResponseSchema(Schema):
+    """Response schema for review processing"""
+    card_id: str
+    success: bool
+    previous_state: Dict[str, Any]
+    new_state: Dict[str, Any]
+    review_result: Dict[str, Any]
+    sm2_metadata: Dict[str, Any]
+    performance_stats: Dict[str, Any]
 
 class StudyStatsSchema(Schema):
-    student_id: int
+    """Schema for study statistics"""
+    student_id: str
+    analysis_period_days: int
     total_cards: int
-    new_cards: int
-    learning_cards: int
-    review_cards: int
-    graduated_cards: int
-    daily_streak: int
-    next_review_time: Optional[datetime] = None
+    stage_distribution: Dict[str, int]
+    due_analysis: Dict[str, int]
+    performance_metrics: Dict[str, float]
+    learning_progress: Dict[str, int]
+    session_statistics: Dict[str, Any]
+    recommendations: List[str]
 
-# Flashcard management
-@router.get("/flashcards", response=List[FlashcardSchema])
-def list_flashcards(request, knowledge_component_id: Optional[int] = None):
-    """Get all flashcards, optionally filtered by knowledge component"""
-    # TODO: Implement actual database query
-    return [
-        {
-            "id": 1,
-            "knowledge_component_id": 1,
-            "front_content": "What is the quadratic formula?",
-            "back_content": "x = (-b ± √(b²-4ac)) / 2a",
-            "difficulty": 0.7,
-            "tags": ["algebra", "quadratic", "formula"],
-            "created_at": datetime.now()
+class OptimalStudySetSchema(Schema):
+    """Schema for optimal study set selection"""
+    student_id: str
+    target_duration_minutes: int
+    selected_cards: List[DueCardSchema]
+    estimated_session_time: int
+    session_metadata: Dict[str, Any]
+
+class AddCardsRequestSchema(Schema):
+    """Schema for adding cards to student deck"""
+    student_id: str
+    question_ids: List[str]
+    initial_stage: Optional[str] = "apprentice_1"
+
+class AddCardsResponseSchema(Schema):
+    """Response schema for adding cards"""
+    student_id: str
+    cards_added: int
+    cards_already_exist: int
+    new_cards: List[Dict[str, Any]]
+    success: bool
+
+# ============================================================================
+# SM-2 Spaced Repetition API Endpoints
+# ============================================================================
+
+@router.get("/api/v1/practice/{student_id}/due-cards", 
+           response=DueCardsResponseSchema,
+           tags=["SM-2 Spaced Repetition"])
+def get_due_cards_sm2(request, student_id: str, limit: int = 20, 
+                      stage_filter: Optional[str] = None):
+    """
+    Get cards due for review using SM-2 algorithm.
+    
+    Returns cards that are due for review, ordered by priority score.
+    Includes comprehensive metadata for optimal study sessions.
+    """
+    try:
+        # Parse stage filter if provided
+        include_stages = None
+        if stage_filter:
+            include_stages = [s.strip() for s in stage_filter.split(',')]
+        
+        # Get due cards using SM-2 scheduler
+        due_cards_data = sm2_scheduler.get_due_cards(
+            student_id=student_id,
+            limit=limit,
+            include_stage_filter=include_stages
+        )
+        
+        # Convert to schema format
+        cards = []
+        for card_data in due_cards_data:
+            card_schema = DueCardSchema(**card_data)
+            cards.append(card_schema)
+        
+        # Generate session metadata
+        session_metadata = {
+            "total_requested": limit,
+            "stage_filter_applied": stage_filter is not None,
+            "estimated_session_time_minutes": len(cards) * 0.5,  # 30 seconds per card
+            "priority_range": {
+                "min": min((card.priority_score for card in cards), default=0),
+                "max": max((card.priority_score for card in cards), default=0)
+            }
         }
-    ]
-
-@router.post("/flashcards", response=FlashcardSchema)
-def create_flashcard(request, payload: FlashcardCreateSchema):
-    """Create a new flashcard"""
-    # TODO: Implement actual database creation
-    return {
-        "id": 1,
-        "knowledge_component_id": payload.knowledge_component_id,
-        "front_content": payload.front_content,
-        "back_content": payload.back_content,
-        "difficulty": payload.difficulty,
-        "tags": payload.tags,
-        "created_at": datetime.now()
-    }
-
-@router.get("/flashcards/{flashcard_id}", response=FlashcardSchema)
-def get_flashcard(request, flashcard_id: int):
-    """Get a specific flashcard"""
-    # TODO: Implement actual database query
-    return {
-        "id": flashcard_id,
-        "knowledge_component_id": 1,
-        "front_content": "What is the quadratic formula?",
-        "back_content": "x = (-b ± √(b²-4ac)) / 2a",
-        "difficulty": 0.7,
-        "tags": ["algebra", "quadratic", "formula"],
-        "created_at": datetime.now()
-    }
-
-# SRS System endpoints
-@router.get("/students/{student_id}/due-cards", response=List[StudentCardSchema])
-def get_due_cards(request, student_id: int, limit: int = 20):
-    """Get cards due for review for a specific student"""
-    # TODO: Implement actual SRS algorithm to find due cards
-    return [
-        {
-            "id": 1,
+        
+        # Get study recommendations
+        try:
+            student_stats = sm2_scheduler.get_review_statistics(student_id, days=7)
+            recommendations = student_stats.get('recommendations', [])
+        except:
+            recommendations = ["Start reviewing your due cards!"]
+        
+        return {
             "student_id": student_id,
-            "flashcard_id": 1,
-            "status": CardStatus.REVIEW,
-            "ease_factor": 2.5,
-            "interval": 3,
-            "repetitions": 2,
-            "next_review": datetime.now() - timedelta(hours=1),  # Due now
-            "last_reviewed": datetime.now() - timedelta(days=3)
+            "total_due": len(cards),
+            "cards": cards,
+            "session_metadata": session_metadata,
+            "study_recommendations": recommendations
         }
-    ]
+        
+    except Exception as e:
+        logger.error(f"Error getting due cards for student {student_id}: {e}")
+        raise HttpError(500, f"Failed to get due cards: {str(e)}")
 
-@router.post("/students/{student_id}/study-session", response=ReviewSessionSchema)
-def start_study_session(request, student_id: int):
-    """Start a new study session for a student"""
-    # TODO: Implement actual session creation
-    due_cards = []  # Get from get_due_cards logic
-    
-    return {
-        "id": 1,
-        "student_id": student_id,
-        "cards_due": due_cards,
-        "session_start": datetime.now(),
-        "cards_reviewed": 0
-    }
 
-@router.post("/review-card", response=StudentCardSchema)
-def submit_card_review(request, payload: SubmitReviewSchema):
-    """Submit a review result for a flashcard using SM-2 algorithm"""
-    # TODO: Implement actual SM-2 algorithm
+@router.post("/api/v1/practice/review", 
+            response=ReviewResponseSchema,
+            tags=["SM-2 Spaced Repetition"])
+def process_review_sm2(request, payload: ReviewRequestSchema):
+    """
+    Process a review using SM-2 algorithm.
     
-    # Mock SM-2 calculation
-    if payload.result == ReviewResult.EASY:
-        new_interval = 7
-        new_ease_factor = 2.6
-        new_repetitions = 3
-    elif payload.result == ReviewResult.GOOD:
-        new_interval = 3
-        new_ease_factor = 2.5
-        new_repetitions = 2
-    elif payload.result == ReviewResult.HARD:
-        new_interval = 1
-        new_ease_factor = 2.3
-        new_repetitions = 1
-    else:  # AGAIN
-        new_interval = 1
-        new_ease_factor = 2.0
-        new_repetitions = 0
-    
-    next_review = datetime.now() + timedelta(days=new_interval)
-    
-    return {
-        "id": payload.student_card_id,
-        "student_id": 1,  # TODO: Get from actual student card
-        "flashcard_id": 1,
-        "status": CardStatus.REVIEW,
-        "ease_factor": new_ease_factor,
-        "interval": new_interval,
-        "repetitions": new_repetitions,
-        "next_review": next_review,
-        "last_reviewed": datetime.now()
-    }
+    Updates card parameters, calculates new intervals, and manages
+    SRS stage progressions based on review quality.
+    """
+    try:
+        # Validate quality score
+        if not (0 <= payload.quality <= 5):
+            raise HttpError(400, "Quality must be between 0 and 5")
+        
+        # Process the review using SM-2 scheduler
+        review_result = sm2_scheduler.process_review(
+            card_id=payload.card_id,
+            quality=payload.quality,
+            response_time=payload.response_time
+        )
+        
+        if not review_result.get('success', False):
+            error_msg = review_result.get('error', 'Unknown error')
+            raise HttpError(500, f"Review processing failed: {error_msg}")
+        
+        return ReviewResponseSchema(**review_result)
+        
+    except HttpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error processing review: {e}")
+        raise HttpError(500, f"Review processing failed: {str(e)}")
 
-@router.get("/students/{student_id}/study-stats", response=StudyStatsSchema)
-def get_study_statistics(request, student_id: int):
-    """Get study statistics and progress for a student"""
-    # TODO: Implement actual statistics calculation
-    return {
-        "student_id": student_id,
-        "total_cards": 45,
-        "new_cards": 5,
-        "learning_cards": 8,
-        "review_cards": 25,
-        "graduated_cards": 7,
-        "daily_streak": 12,
-        "next_review_time": datetime.now() + timedelta(hours=2)
-    }
 
-# Advanced SRS features
-@router.post("/students/{student_id}/add-cards")
-def add_cards_to_student(request, student_id: int, flashcard_ids: List[int]):
-    """Add new flashcards to a student's study deck"""
-    # TODO: Implement adding cards to student's deck
-    added_cards = []
-    for card_id in flashcard_ids:
-        added_cards.append({
+@router.get("/api/v1/practice/{student_id}/stats", 
+           response=StudyStatsSchema,
+           tags=["SM-2 Analytics"])
+def get_study_statistics_sm2(request, student_id: str, days: int = 30):
+    """
+    Get comprehensive study statistics using SM-2 analytics.
+    
+    Provides detailed analysis of learning progress, performance metrics,
+    and personalized recommendations.
+    """
+    try:
+        # Get statistics from SM-2 scheduler
+        stats_data = sm2_scheduler.get_review_statistics(student_id, days=days)
+        
+        if 'error' in stats_data:
+            raise HttpError(500, f"Statistics error: {stats_data['error']}")
+        
+        return StudyStatsSchema(**stats_data)
+        
+    except HttpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting statistics for student {student_id}: {e}")
+        raise HttpError(500, f"Statistics retrieval failed: {str(e)}")
+
+
+@router.get("/api/v1/practice/{student_id}/optimal-study-set",
+           response=OptimalStudySetSchema,
+           tags=["SM-2 Optimization"])
+def get_optimal_study_set(request, student_id: str, 
+                         target_duration: int = 20, max_cards: int = 50):
+    """
+    Get optimally selected study set for maximum learning efficiency.
+    
+    Uses SM-2 adaptive selection to choose the best cards for a
+    targeted study session duration.
+    """
+    try:
+        # Get optimal study set
+        selected_cards_data = sm2_selector.select_optimal_study_set(
+            student_id=student_id,
+            target_duration=target_duration,
+            max_cards=max_cards
+        )
+        
+        # Convert to schema format
+        selected_cards = []
+        for card_data in selected_cards_data:
+            card_schema = DueCardSchema(**card_data)
+            selected_cards.append(card_schema)
+        
+        # Estimate actual session time
+        estimated_time = len(selected_cards) * 0.5  # 30 seconds per card average
+        
+        # Generate session metadata
+        session_metadata = {
+            "selection_algorithm": "SM-2 Adaptive",
+            "target_duration_minutes": target_duration,
+            "actual_cards_selected": len(selected_cards),
+            "estimated_completion_time": estimated_time,
+            "efficiency_score": min(1.0, target_duration / max(estimated_time, 1)),
+            "stage_variety": len(set(card.stage for card in selected_cards))
+        }
+        
+        return {
             "student_id": student_id,
-            "flashcard_id": card_id,
-            "status": CardStatus.NEW,
-            "ease_factor": 2.5,
-            "interval": 1,
-            "repetitions": 0,
-            "next_review": datetime.now(),
-            "last_reviewed": None
-        })
-    
-    return {
-        "message": f"Added {len(flashcard_ids)} cards to student {student_id}",
-        "cards_added": added_cards
-    }
+            "target_duration_minutes": target_duration,
+            "selected_cards": selected_cards,
+            "estimated_session_time": int(estimated_time),
+            "session_metadata": session_metadata
+        }
+        
+    except Exception as e:
+        logger.error(f"Error selecting optimal study set for {student_id}: {e}")
+        raise HttpError(500, f"Optimal study set selection failed: {str(e)}")
 
-@router.get("/students/{student_id}/learning-curve")
-def get_learning_curve(request, student_id: int, days: int = 30):
-    """Get learning curve data for visualization"""
-    # TODO: Implement learning curve calculation
-    curve_data = []
-    for i in range(days):
-        date = datetime.now() - timedelta(days=days-i)
-        curve_data.append({
-            "date": date,
-            "cards_reviewed": 5 + i,
-            "accuracy_rate": min(0.95, 0.6 + (i * 0.01)),
-            "average_ease_factor": 2.3 + (i * 0.005)
-        })
-    
-    return {
-        "student_id": student_id,
-        "learning_curve": curve_data,
-        "trend": "improving",
-        "predicted_mastery_date": datetime.now() + timedelta(days=45)
-    }
 
-@router.get("/students/{student_id}/difficult-cards", response=List[StudentCardSchema])
-def get_difficult_cards(request, student_id: int, limit: int = 10):
-    """Get cards that the student finds most difficult"""
-    # TODO: Implement difficulty analysis
-    return [
-        {
-            "id": 1,
+@router.post("/api/v1/practice/add-cards",
+            response=AddCardsResponseSchema,
+            tags=["SM-2 Card Management"])
+def add_cards_to_student_sm2(request, payload: AddCardsRequestSchema):
+    """
+    Add new cards to student's SRS deck.
+    
+    Creates new SRS cards with SM-2 parameters initialized.
+    Handles duplicate detection and batch processing.
+    """
+    try:
+        with transaction.atomic():
+            # Verify student exists
+            try:
+                student = User.objects.get(id=payload.student_id)
+            except User.DoesNotExist:
+                raise HttpError(404, f"Student {payload.student_id} not found")
+            
+            # Get questions
+            questions = AdaptiveQuestion.objects.filter(
+                id__in=payload.question_ids,
+                is_active=True
+            )
+            
+            if not questions.exists():
+                raise HttpError(404, "No valid questions found")
+            
+            # Check for existing cards
+            existing_card_questions = set(
+                SRSCard.objects.filter(
+                    student=student,
+                    question__id__in=payload.question_ids
+                ).values_list('question_id', flat=True)
+            )
+            
+            # Create new cards
+            new_cards = []
+            cards_created = 0
+            
+            for question in questions:
+                if question.id not in existing_card_questions:
+                    card = SRSCard.objects.create(
+                        student=student,
+                        question=question,
+                        stage=payload.initial_stage,
+                        ease_factor=sm2_scheduler.DEFAULT_EASE_FACTOR,
+                        interval=1,
+                        repetition=0,
+                        due_date=timezone.now(),  # Available immediately
+                    )
+                    
+                    new_cards.append({
+                        "card_id": str(card.id),
+                        "question_id": str(question.id),
+                        "question_text": question.question_text[:50] + "...",
+                        "stage": card.stage,
+                        "due_date": card.due_date
+                    })
+                    cards_created += 1
+            
+            return {
+                "student_id": payload.student_id,
+                "cards_added": cards_created,
+                "cards_already_exist": len(existing_card_questions),
+                "new_cards": new_cards,
+                "success": True
+            }
+            
+    except HttpError:
+        raise
+    except Exception as e:
+        logger.error(f"Error adding cards to student {payload.student_id}: {e}")
+        raise HttpError(500, f"Card addition failed: {str(e)}")
+
+
+@router.get("/api/v1/practice/{student_id}/difficult-cards",
+           response=List[DueCardSchema],
+           tags=["SM-2 Analytics"])
+def get_difficult_cards_sm2(request, student_id: str, limit: int = 10):
+    """
+    Get cards that the student finds most difficult.
+    
+    Identifies cards with low ease factors, high incorrect counts,
+    or poor success rates for targeted practice.
+    """
+    try:
+        # Query for difficult cards
+        difficult_cards_query = SRSCard.objects.filter(
+            student_id=student_id,
+            is_suspended=False
+        ).filter(
+            Q(ease_factor__lt=2.0) |  # Low ease factor
+            Q(incorrect_count__gte=3) |  # Many incorrect answers
+            Q(correct_streak=0)  # Currently struggling
+        ).select_related('question').order_by(
+            'ease_factor', '-incorrect_count', 'due_date'
+        )[:limit]
+        
+        # Convert to due card format
+        difficult_cards = []
+        for card in difficult_cards_query:
+            card_data = {
+                'card_id': str(card.id),
+                'question_id': str(card.question.id),
+                'question_text': card.question.question_text,
+                'question_type': card.question.question_type,
+                'stage': card.stage,
+                'ease_factor': card.ease_factor,
+                'interval': card.interval,
+                'repetition': card.repetition,
+                'due_date': card.due_date,
+                'last_reviewed': card.last_reviewed,
+                'correct_streak': card.correct_streak,
+                'total_reviews': card.total_reviews,
+                'success_rate': card.success_rate,
+                'average_response_time': card.average_response_time,
+                'is_overdue': card.due_date < timezone.now(),
+                'priority_score': sm2_scheduler._calculate_priority_score(card)
+            }
+            difficult_cards.append(DueCardSchema(**card_data))
+        
+        return difficult_cards
+        
+    except Exception as e:
+        logger.error(f"Error getting difficult cards for student {student_id}: {e}")
+        raise HttpError(500, f"Difficult cards retrieval failed: {str(e)}")
+
+
+@router.post("/api/v1/practice/{student_id}/reset-card/{card_id}",
+            tags=["SM-2 Card Management"])
+def reset_card_sm2(request, student_id: str, card_id: str):
+    """
+    Reset a card back to apprentice level.
+    
+    Useful for cards that have become too difficult or need fresh start.
+    """
+    try:
+        with transaction.atomic():
+            card = SRSCard.objects.select_for_update().get(
+                id=card_id,
+                student_id=student_id
+            )
+            
+            old_stage = card.stage
+            card.reset_to_apprentice()
+            
+            return {
+                "success": True,
+                "card_id": card_id,
+                "message": f"Card reset from {old_stage} to {card.stage}",
+                "new_due_date": card.due_date
+            }
+            
+    except SRSCard.DoesNotExist:
+        raise HttpError(404, f"Card {card_id} not found for student {student_id}")
+    except Exception as e:
+        logger.error(f"Error resetting card {card_id}: {e}")
+        raise HttpError(500, f"Card reset failed: {str(e)}")
+
+
+@router.get("/api/v1/practice/{student_id}/session-summary",
+           tags=["SM-2 Analytics"])
+def get_session_summary(request, student_id: str):
+    """
+    Get current session summary statistics.
+    
+    Shows progress within the current study session.
+    """
+    try:
+        session_stats = sm2_scheduler.session_stats.copy()
+        
+        # Calculate derived metrics
+        accuracy = 0.0
+        avg_response_time = 0.0
+        
+        if session_stats['cards_reviewed'] > 0:
+            accuracy = session_stats['correct_answers'] / session_stats['cards_reviewed']
+        
+        if session_stats['total_response_time'] > 0 and session_stats['cards_reviewed'] > 0:
+            avg_response_time = session_stats['total_response_time'] / session_stats['cards_reviewed']
+        
+        return {
             "student_id": student_id,
-            "flashcard_id": 5,
-            "status": CardStatus.LEARNING,
-            "ease_factor": 1.8,  # Low ease factor indicates difficulty
-            "interval": 1,
-            "repetitions": 0,
-            "next_review": datetime.now(),
-            "last_reviewed": datetime.now() - timedelta(hours=2)
+            "session_stats": session_stats,
+            "derived_metrics": {
+                "accuracy_rate": round(accuracy, 3),
+                "average_response_time": round(avg_response_time, 1),
+                "cards_per_progression": (
+                    session_stats['cards_reviewed'] / max(1, session_stats['stage_progressions'])
+                )
+            },
+            "session_active": session_stats['cards_reviewed'] > 0
         }
-    ]
+        
+    except Exception as e:
+        logger.error(f"Error getting session summary for {student_id}: {e}")
+        raise HttpError(500, f"Session summary failed: {str(e)}")
 
-@router.get("/optimize/{student_id}")
-def optimize_study_schedule(request, student_id: int):
-    """Get optimized study schedule recommendations"""
-    # TODO: Implement optimization algorithm
-    return {
-        "student_id": student_id,
-        "recommended_daily_cards": 15,
-        "optimal_study_times": ["09:00", "15:00", "20:00"],
-        "focus_areas": ["Quadratic equations", "Linear functions"],
-        "estimated_time_per_session": 20,  # minutes
-        "weekly_goals": {
-            "new_cards": 35,
-            "reviews": 150,
-            "target_accuracy": 0.85
+
+@router.post("/api/v1/practice/reset-session",
+            tags=["SM-2 Session Management"])
+def reset_session_stats(request):
+    """
+    Reset session statistics for new study session.
+    
+    Clears current session counters and timers.
+    """
+    try:
+        sm2_scheduler.reset_session_stats()
+        
+        return {
+            "success": True,
+            "message": "Session statistics reset",
+            "new_session_stats": sm2_scheduler.session_stats
         }
-    }
+        
+    except Exception as e:
+        logger.error(f"Error resetting session stats: {e}")
+        raise HttpError(500, f"Session reset failed: {str(e)}")
+
 
 @router.get("/status")
 def practice_status(request):
-    """Practice app status endpoint"""
+    """Practice app status endpoint with SM-2 integration"""
     return {
         "app": "practice", 
         "status": "ready", 
-        "description": "Spaced Repetition System (SRS) for flashcard practice",
+        "description": "SM-2 Spaced Repetition System with WaniKani-style progression",
         "features": [
-            "SM-2 Algorithm", 
-            "Adaptive Scheduling", 
-            "Learning Analytics",
-            "Difficulty Optimization",
-            "Progress Tracking"
+            "SM-2 Algorithm Implementation", 
+            "WaniKani-style SRS Stages",
+            "Adaptive Card Selection", 
+            "Performance Analytics",
+            "Session Management",
+            "Difficulty Analysis",
+            "Optimal Study Scheduling"
         ],
-        "algorithms": ["SM-2", "Custom SRS"]
+        "algorithms": {
+            "sm2": {
+                "status": "implemented",
+                "version": "Enhanced SuperMemo-2",
+                "features": ["mathematical_intervals", "ease_factor_optimization", "stage_progression"]
+            }
+        },
+        "endpoints": {
+            "due_cards": "/api/v1/practice/{student_id}/due-cards",
+            "process_review": "/api/v1/practice/review",
+            "statistics": "/api/v1/practice/{student_id}/stats",
+            "optimal_study": "/api/v1/practice/{student_id}/optimal-study-set",
+            "add_cards": "/api/v1/practice/add-cards"
+        }
     }

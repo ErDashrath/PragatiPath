@@ -22,6 +22,23 @@ class StudentProfile(models.Model):
     # Format: [{"question_id": "123", "timestamp": "...", "correct": true, "time": 15.2}, ...]
     interaction_history = models.JSONField(default=list, blank=True)
     
+    # Mastery-Based Level Progression Fields
+    # Current level per skill - Format: {"algebra": 2, "geometry": 1, "calculus": 0}
+    current_level = models.JSONField(default=dict, blank=True)
+    
+    # Mastery threshold for level progression (default 0.8)
+    mastery_threshold = models.FloatField(default=0.8)
+    
+    # Consecutive correct count per skill/level - Format: {"algebra_level_1": 2, "geometry_level_0": 1}
+    consecutive_correct_count = models.JSONField(default=dict, blank=True)
+    
+    # Level lock status per skill - Format: {"algebra": [0, 1, 2], "geometry": [0, 1]} (unlocked levels)
+    level_lock_status = models.JSONField(default=dict, blank=True)
+    
+    # Subject-wise progress for competitive exams
+    # Format: {"quantitative_aptitude": {"current_difficulty": "easy", "level": 2, "mastery_score": 0.75, ...}}
+    subject_progress = models.JSONField(default=dict, blank=True)
+    
     # Timestamps
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

@@ -452,13 +452,13 @@ def update_dkt_knowledge(request, data: DKTUpdateSchema):
             
             # Update skill predictions in fundamentals
             if 'skill_predictions' in dkt_result:
-                if not student.fundamentals_scores:
-                    student.fundamentals_scores = {}
+                if not student.fundamentals:
+                    student.fundamentals = {}
                 
                 # Update skill scores based on DKT predictions
                 for skill_idx, prediction in enumerate(dkt_result['skill_predictions']):
                     skill_key = f"skill_{skill_idx}"
-                    student.fundamentals_scores[skill_key] = {
+                    student.fundamentals[skill_key] = {
                         'mastery_probability': prediction,
                         'dkt_confidence': dkt_result.get('confidence', 0.5),
                         'last_updated': timezone.now().isoformat()
@@ -486,11 +486,11 @@ def update_dkt_knowledge(request, data: DKTUpdateSchema):
                 mastery_probability = 0.5
             
             # Update fundamentals scores with fallback
-            if not student.fundamentals_scores:
-                student.fundamentals_scores = {}
+            if not student.fundamentals:
+                student.fundamentals = {}
             
             skill_key = f"skill_{data.skill_id}"
-            student.fundamentals_scores[skill_key] = {
+            student.fundamentals[skill_key] = {
                 'mastery_probability': mastery_probability,
                 'dkt_confidence': 0.0,  # No DKT confidence available
                 'last_updated': timezone.now().isoformat(),
@@ -552,7 +552,7 @@ def get_dkt_predictions(request, student_id: str):
             }
         else:
             # Return stored fundamentals scores as fallback
-            fundamentals = student.fundamentals_scores or {}
+            fundamentals = student.fundamentals or {}
             skill_predictions = []
             
             for i in range(50):  # Assume 50 skills

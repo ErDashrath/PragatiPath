@@ -210,6 +210,60 @@ class BKTService:
         return BKTParameters.from_dict(profile.bkt_parameters[skill_id])
     
     @staticmethod
+    def update_skill_bkt_with_progression(
+        user: User, 
+        skill_id: str, 
+        is_correct: bool,
+        interaction_data: Optional[Dict[str, Any]] = None
+    ) -> Tuple[BKTParameters, Dict[str, Any]]:
+        """
+        Update BKT parameters for a skill with level progression logic
+        
+        Args:
+            user: Django User object
+            skill_id: Skill identifier
+            is_correct: Whether the student answered correctly
+            interaction_data: Additional interaction data for history
+            
+        Returns:
+            Tuple of (Updated BKTParameters, Level Progression Info)
+        """
+        from student_model.level_progression import LevelProgressionService
+        
+        profile = BKTService.get_or_create_student_profile(user)
+        
+        # Get current BKT parameters
+        current_params = BKTService.get_skill_bkt_params(user, skill_id)
+        
+        # Update BKT parameters
+        updated_params = update_bkt(current_params, is_correct)
+        
+        # Save to database
+        profile.bkt_parameters[skill_id] = updated_params.to_dict()
+        
+        # Update interaction history
+        if interaction_data:
+            interaction_entry = {
+                'timestamp': interaction_data.get('timestamp'),
+                'skill_id': skill_id,
+                'is_correct': is_correct,
+                'P_L_before': current_params.P_L,
+                'P_L_after': updated_params.P_L,
+                **interaction_data
+            }
+            profile.interaction_history.append(interaction_entry)
+        
+        # Update level progression
+        progression_service = LevelProgressionService()
+        progression_info = progression_service.update_progression(
+            profile, skill_id, is_correct, updated_params.P_L
+        )
+        
+        profile.save()
+        
+        return updated_params, progression_info
+    
+    @staticmethod
     def update_skill_bkt(
         user: User, 
         skill_id: str, 

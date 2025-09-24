@@ -24,6 +24,8 @@ from django.conf.urls.static import static
 from core.api import router as core_router
 from student_model.api import router as student_model_router
 from assessment.api import router as assessment_router
+from assessment.competitive_api_v1 import router as competitive_v1_router
+from assessment.enhanced_api_v2 import router as enhanced_v2_router
 from analytics.api import router as analytics_router
 from practice.api import router as practice_router
 
@@ -40,6 +42,8 @@ api = NinjaAPI(
 api.add_router("/core/", core_router, tags=["Core"])
 api.add_router("/student-model/", student_model_router, tags=["Student Model"])
 api.add_router("/assessment/", assessment_router, tags=["Assessment"])
+api.add_router("/assessment/", competitive_v1_router, tags=["Competitive Exam v1"])
+api.add_router("/assessment/", enhanced_v2_router, tags=["AI-Enhanced Assessment v2"])
 api.add_router("/analytics/", analytics_router, tags=["Analytics"])
 api.add_router("/practice/", practice_router, tags=["Practice"])
 
