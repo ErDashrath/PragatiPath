@@ -592,3 +592,42 @@ def generate_achievements(student_profile, subject_progress_list):
         achievements.append("Multi-Subject Learner")
     
     return achievements
+
+
+@router.get("/leaderboard")
+def get_leaderboard(request, limit: int = 10):
+    """Get competitive exam leaderboard"""
+    # Return mock leaderboard data
+    return {
+        "leaderboard": [
+            {
+                "rank": 1,
+                "student_id": "student-001",
+                "username": "TopLearner",
+                "total_score": 2850,
+                "subjects_mastered": 5,
+                "accuracy_rate": 0.94,
+                "achievements": ["Math Master", "Science Expert", "Question Marathoner"]
+            },
+            {
+                "rank": 2,
+                "student_id": "student-002", 
+                "username": "StudyHero",
+                "total_score": 2720,
+                "subjects_mastered": 4,
+                "accuracy_rate": 0.91,
+                "achievements": ["Physics Pro", "Chemistry Champion"]
+            },
+            {
+                "rank": 3,
+                "student_id": "student-003",
+                "username": "BrainAce",
+                "total_score": 2580,
+                "subjects_mastered": 3,
+                "accuracy_rate": 0.89,
+                "achievements": ["Biology Expert", "Multi-Subject Learner"]
+            }
+        ],
+        "total_participants": 156,
+        "generated_at": datetime.now().isoformat()
+    }

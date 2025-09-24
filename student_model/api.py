@@ -260,9 +260,9 @@ def update_student_bkt(request, student_id: int, payload: BKTUpdateRequestSchema
 @router.get("/student/{student_id}/bkt/state/{skill_id}",
             response=BKTStateResponseSchema,
             tags=["BKT Algorithm"])
-def get_student_bkt_state(request, student_id: int, skill_id: str):
+def get_student_bkt_state(request, student_id: str, skill_id: str):
     """
-    Get current BKT state for a specific skill for a student
+    Get current BKT state for a specific skill for a student - accepts UUID
     
     Returns the current Bayesian Knowledge Tracing parameters and mastery status
     for the specified skill.
@@ -296,76 +296,31 @@ def get_student_bkt_state(request, student_id: int, skill_id: str):
 
 
 @router.get("/student/{student_id}/bkt/states/all",
-            response=AllBKTStatesResponseSchema,
+            response=Dict[str, Any],
             tags=["BKT Algorithm"])
-def get_all_student_bkt_states(request, student_id: int):
+def get_all_student_bkt_states(request, student_id: str):
     """
     Get BKT states for all skills for a student
     
     Returns comprehensive BKT information including all tracked skills,
     their current parameters, and mastery status.
     """
-    try:
-        user = get_object_or_404(User, id=student_id)
-        
-        # Get all skill states
-        skill_states = BKTService.get_all_skill_states(user)
-        
-        # Convert to response format
-        skill_states_response = {}
-        mastered_skills_list = []
-        
-        for skill_id, params in skill_states.items():
-            skill_states_response[skill_id] = {
-                "P_L0": params.P_L0,
-                "P_T": params.P_T,
-                "P_G": params.P_G,
-                "P_S": params.P_S,
-                "P_L": params.P_L
-            }
-            
-            if params.P_L >= 0.95:
-                mastered_skills_list.append(skill_id)
-        
-        return {
-            "student_id": student_id,
-            "total_skills": len(skill_states),
-            "mastered_skills": len(mastered_skills_list),
-            "skill_states": skill_states_response,
-            "mastered_skills_list": mastered_skills_list,
-            "generated_at": datetime.now()
-        }
-        
-    except User.DoesNotExist:
-        raise Http404(f"Student with id {student_id} not found")
+    from api_serializers import serialize_bkt_states
+    return serialize_bkt_states(student_id)
 
 
 @router.get("/student/{student_id}/bkt/mastered",
-            response=MasteredSkillsResponseSchema,
+            response=Dict[str, Any],
             tags=["BKT Algorithm"])
-def get_mastered_skills(request, student_id: int, threshold: float = 0.95):
+def get_mastered_skills(request, student_id: str, threshold: float = 0.95):
     """
     Get all mastered skills for a student
     
     Returns skills that have reached the mastery threshold (default 95% probability).
     Useful for determining what content the student has completed.
     """
-    try:
-        user = get_object_or_404(User, id=student_id)
-        
-        # Get mastered skills
-        mastered_skills = BKTService.get_mastered_skills(user, threshold)
-        
-        return {
-            "student_id": student_id,
-            "mastered_skills": mastered_skills,
-            "threshold": threshold,
-            "total_mastered": len(mastered_skills),
-            "generated_at": datetime.now()
-        }
-        
-    except User.DoesNotExist:
-        raise Http404(f"Student with id {student_id} not found")
+    from api_serializers import serialize_mastered_skills
+    return serialize_mastered_skills(student_id, threshold)
 
 
 @router.post("/student/{student_id}/bkt/reset/{skill_id}",

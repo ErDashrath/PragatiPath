@@ -20,7 +20,7 @@ class TimeRange(str, Enum):
 
 # Analytics schemas
 class StudentPerformanceSchema(Schema):
-    student_id: int
+    student_id: str  # Changed to str to support UUID
     total_questions: int
     correct_answers: int
     accuracy_rate: float
@@ -29,7 +29,7 @@ class StudentPerformanceSchema(Schema):
     last_activity: datetime
 
 class LearningAnalyticsSchema(Schema):
-    student_id: int
+    student_id: str  # Changed to str to support UUID
     knowledge_component_id: int
     mastery_level: float
     time_to_mastery: Optional[float] = None  # in hours
@@ -47,7 +47,7 @@ class SystemMetricsSchema(Schema):
     generated_at: datetime
 
 class ProgressTrackingSchema(Schema):
-    student_id: int
+    student_id: str  # Changed to str to support UUID
     date: datetime
     knowledge_components_mastered: int
     questions_attempted: int
@@ -55,7 +55,7 @@ class ProgressTrackingSchema(Schema):
     accuracy_score: float
 
 class RecommendationSchema(Schema):
-    student_id: int
+    student_id: str  # Changed to str to support UUID
     recommended_topics: List[str]
     difficulty_adjustment: float
     study_time_suggestion: int  # in minutes
@@ -63,66 +63,29 @@ class RecommendationSchema(Schema):
     confidence: float
 
 # Student analytics endpoints
-@router.get("/students/{student_id}/performance", response=StudentPerformanceSchema)
-def get_student_performance(request, student_id: int, time_range: TimeRange = TimeRange.WEEK):
+@router.get("/students/{student_id}/performance")
+def get_student_performance(request, student_id: str, time_range: TimeRange = TimeRange.WEEK):
     """Get comprehensive performance analytics for a student"""
-    # TODO: Implement actual analytics calculation
-    return {
-        "student_id": student_id,
-        "total_questions": 50,
-        "correct_answers": 38,
-        "accuracy_rate": 0.76,
-        "average_response_time": 15.3,
-        "learning_progress": 0.68,
-        "last_activity": datetime.now()
-    }
+    from api_serializers import serialize_student_performance
+    return serialize_student_performance(student_id)
 
-@router.get("/students/{student_id}/learning-analytics", response=List[LearningAnalyticsSchema])
-def get_learning_analytics(request, student_id: int):
-    """Get detailed learning analytics for each knowledge component"""
-    # TODO: Implement actual learning analytics
-    return [
-        {
-            "student_id": student_id,
-            "knowledge_component_id": 1,
-            "mastery_level": 0.85,
-            "time_to_mastery": 2.5,
-            "attempts_count": 12,
-            "improvement_rate": 0.15,
-            "difficulty_preference": 0.6
-        }
-    ]
+@router.get("/students/{student_id}/learning-analytics")
+def get_learning_analytics(request, student_id: str):
+    """Get knowledge component learning analytics for a student"""
+    from api_serializers import serialize_learning_analytics
+    return serialize_learning_analytics(student_id)
 
-@router.get("/students/{student_id}/progress-tracking", response=List[ProgressTrackingSchema])
-def get_progress_tracking(request, student_id: int, days: int = 30):
+@router.get("/students/{student_id}/progress-tracking")
+def get_progress_tracking(request, student_id: str, days: int = 30):
     """Get daily progress tracking for a student"""
-    # TODO: Implement actual progress tracking
-    progress_data = []
-    for i in range(days):
-        date = datetime.now() - timedelta(days=i)
-        progress_data.append({
-            "student_id": student_id,
-            "date": date,
-            "knowledge_components_mastered": min(i + 1, 10),
-            "questions_attempted": (i * 2) + 5,
-            "time_spent": 20 + (i * 1.5),
-            "accuracy_score": 0.6 + (i * 0.01)
-        })
-    
-    return progress_data
+    from api_serializers import serialize_progress_tracking
+    return serialize_progress_tracking(student_id, days)
 
-@router.get("/students/{student_id}/recommendations", response=RecommendationSchema)
-def get_personalized_recommendations(request, student_id: int):
+@router.get("/students/{student_id}/recommendations")
+def get_personalized_recommendations(request, student_id: str):
     """Get AI-powered learning recommendations for a student"""
-    # TODO: Implement recommendation algorithm using ML
-    return {
-        "student_id": student_id,
-        "recommended_topics": ["Linear Equations", "Quadratic Functions"],
-        "difficulty_adjustment": -0.1,  # Slightly easier
-        "study_time_suggestion": 25,
-        "reasoning": "Student shows strong progress but struggles with advanced concepts. Recommend reviewing fundamentals before advancing.",
-        "confidence": 0.87
-    }
+    from api_serializers import serialize_recommendations
+    return serialize_recommendations(student_id)
 
 # System-wide analytics
 @router.get("/system/metrics", response=SystemMetricsSchema)
