@@ -3,6 +3,15 @@ from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
 
+# Import user session models (legacy)
+from .user_session_models import UserSession, UserQuestionHistory, UserSubjectProgress, UserDailyStats
+
+# Import improved multi-student models
+from .improved_models import (
+    Subject, Chapter, StudentSession, QuestionAttempt, 
+    StudentProgress, DailyStudyStats
+)
+
 class AdaptiveQuestion(models.Model):
     QUESTION_TYPES = [
         ('multiple_choice', 'Multiple Choice'),

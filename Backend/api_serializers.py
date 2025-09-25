@@ -178,3 +178,122 @@ def serialize_mastered_skills(student_id: str, threshold: float = 0.95) -> Dict[
         "total_skills": 5,
         "mastery_percentage": 20.0
     }
+
+
+def serialize_csv_question_data(question_data: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Serialize CSV question data to AdaptiveQuestion format
+    Used by import systems and API responses for CSV-based questions
+    """
+    return {
+        "question_id": question_data.get("id", ""),
+        "question_text": question_data.get("question_text", ""),
+        "question_type": "multiple_choice",
+        "options": {
+            "a": question_data.get("option_a", ""),
+            "b": question_data.get("option_b", ""), 
+            "c": question_data.get("option_c", ""),
+            "d": question_data.get("option_d", "")
+        },
+        "correct_answer": question_data.get("answer", "").lower(),
+        "difficulty_level": map_csv_difficulty(question_data.get("difficulty", "moderate")),
+        "tags": question_data.get("tags", "").split(",") if question_data.get("tags") else [],
+        "estimated_time": get_estimated_time_from_subject_difficulty(
+            question_data.get("subject", "general"),
+            question_data.get("difficulty", "moderate")
+        )
+    }
+
+
+def serialize_subject_statistics(subject: str) -> Dict[str, Any]:
+    """
+    Serialize subject-wise question statistics for CSV imports
+    """
+    from assessment.models import AdaptiveQuestion
+    
+    try:
+        questions = AdaptiveQuestion.objects.filter(subject=subject, is_active=True)
+        
+        difficulty_breakdown = {}
+        for difficulty in ['very_easy', 'easy', 'moderate', 'difficult']:
+            count = questions.filter(difficulty_level=difficulty).count()
+            if count > 0:
+                difficulty_breakdown[difficulty] = count
+        
+        return {
+            "subject_code": subject,
+            "subject_name": subject.replace('_', ' ').title(),
+            "total_questions": questions.count(),
+            "difficulty_breakdown": difficulty_breakdown,
+            "csv_import_ready": questions.count() > 0,
+            "last_updated": "2025-09-25T00:00:00Z"
+        }
+    except:
+        # Fallback for development
+        return {
+            "subject_code": subject,
+            "subject_name": subject.replace('_', ' ').title(),
+            "total_questions": 0,
+            "difficulty_breakdown": {},
+            "csv_import_ready": False,
+            "last_updated": "2025-09-25T00:00:00Z"
+        }
+
+
+def map_csv_difficulty(difficulty_str: str) -> str:
+    """Map CSV difficulty values to standard model choices"""
+    if not difficulty_str:
+        return 'moderate'
+    
+    difficulty_str = difficulty_str.lower().strip()
+    
+    difficulty_map = {
+        'very easy': 'very_easy',
+        'very_easy': 'very_easy',
+        'easy': 'easy',
+        'moderate': 'moderate',
+        'medium': 'moderate',
+        'difficult': 'difficult',
+        'hard': 'difficult',
+    }
+    
+    return difficulty_map.get(difficulty_str, 'moderate')
+
+
+def get_estimated_time_from_subject_difficulty(subject: str, difficulty: str) -> int:
+    """Get estimated time in seconds based on subject and difficulty from CSV data"""
+    base_times = {
+        'quantitative_aptitude': 120,  # 2 minutes
+        'logical_reasoning': 90,       # 1.5 minutes  
+        'data_interpretation': 180,    # 3 minutes
+        'verbal_ability': 60,          # 1 minute
+        'general': 90                  # Default
+    }
+    
+    difficulty_multipliers = {
+        'very_easy': 0.7,
+        'easy': 0.85,
+        'moderate': 1.0,
+        'difficult': 1.3
+    }
+    
+    base_time = base_times.get(subject, 90)
+    multiplier = difficulty_multipliers.get(map_csv_difficulty(difficulty), 1.0)
+    
+    return int(base_time * multiplier)
+
+
+def serialize_import_summary(subject: str, imported_count: int, errors: list = None) -> Dict[str, Any]:
+    """Serialize CSV import summary for management commands and APIs"""
+    return {
+        "subject": subject,
+        "questions_imported": imported_count,
+        "import_status": "success" if imported_count > 0 else "failed",
+        "errors": errors or [],
+        "timestamp": "2025-09-25T00:00:00Z",
+        "next_steps": [
+            "Run migration if needed",
+            "Test question APIs", 
+            "Verify algorithm integration"
+        ] if imported_count > 0 else ["Check CSV file format", "Fix data errors"]
+    }

@@ -9,6 +9,7 @@ import uuid
 from django.db import transaction
 from django.utils import timezone
 import json
+from django.db.models import Count, Avg, Q
 
 # Import IRT components
 from .irt import IRTEngine, IRTAdaptiveSelector
@@ -1364,3 +1365,233 @@ def list_available_subjects(request):
     except Exception as e:
         logger.error(f"Error listing subjects: {e}")
         raise HttpError(500, f"List subjects error: {str(e)}")
+
+
+# ============================================================================
+# Chapter-Specific Question Endpoints
+# ============================================================================
+
+class ChapterQuestionRequestSchema(Schema):
+    """Schema for requesting chapter-specific questions"""
+    student_id: Optional[str] = "demo-student"
+    subject: str
+    chapter_id: int  # 1, 2, or 3 based on CSV structure
+    difficulty_level: Optional[str] = None
+    count: Optional[int] = 10
+
+class ChapterQuestionSchema(Schema):
+    """Schema for chapter question response"""
+    id: str
+    question_text: str
+    question_type: str
+    subject: str
+    chapter: str
+    topic: Optional[str] = None
+    difficulty_level: str
+    level: int
+    options: Dict[str, str]
+    estimated_time_seconds: int
+    tags: Optional[str] = None
+
+class ChapterQuestionResponseSchema(Schema):
+    """Response schema for chapter questions"""
+    success: bool
+    subject: str
+    chapter_id: int
+    chapter_name: str
+    difficulty_level: Optional[str]
+    requested_count: int
+    returned_count: int
+    questions: List[ChapterQuestionSchema]
+
+@router.post("/chapter-questions", response=ChapterQuestionResponseSchema)
+def get_chapter_questions(request, payload: ChapterQuestionRequestSchema):
+    """Get questions for a specific chapter within a subject"""
+    try:
+        from assessment.models import AdaptiveQuestion
+        
+        # Chapter mapping to CSV tags and names
+        chapter_mappings = {
+            'quantitative_aptitude': {
+                1: {'name': 'Percentages', 'csv_tag': 'percentages'},
+                2: {'name': 'Ratios and Proportions', 'csv_tag': 'ratios_and_proportions'},
+                3: {'name': 'Profit and Loss', 'csv_tag': 'profit_and_loss'}
+            },
+            'logical_reasoning': {
+                1: {'name': 'Pattern Recognition', 'csv_tag': 'pattern_recognition'},
+                2: {'name': 'Syllogisms', 'csv_tag': 'syllogisms'},
+                3: {'name': 'Data Interpretation General', 'csv_tag': 'data_interpretation_general'}
+            },
+            'verbal_ability': {
+                1: {'name': 'Vocabulary', 'csv_tag': 'vocabulary'},
+                2: {'name': 'Grammar', 'csv_tag': 'grammar'},
+                3: {'name': 'Reading Comprehension', 'csv_tag': 'reading_comprehension'}
+            },
+            'data_interpretation': {
+                1: {'name': 'Bar Charts', 'csv_tag': 'bar_charts'},
+                2: {'name': 'Line Graphs', 'csv_tag': 'line_graphs'},
+                3: {'name': 'Pie Charts', 'csv_tag': 'pie_charts'}
+            }
+        }
+        
+        chapter_info = chapter_mappings.get(payload.subject, {}).get(payload.chapter_id)
+        if not chapter_info:
+            raise HttpError(400, f'Invalid chapter_id {payload.chapter_id} for subject {payload.subject}')
+        
+        # Build query filters (since CSV tags aren't chapter-specific, we'll use question distribution)
+        filters = Q(subject=payload.subject, is_active=True)
+        
+        if payload.difficulty_level:
+            filters &= Q(difficulty_level=payload.difficulty_level)
+        
+        # Get all questions for the subject first
+        all_questions = list(AdaptiveQuestion.objects.filter(filters).order_by('id'))
+        total_subject_questions = len(all_questions)
+        
+        if total_subject_questions == 0:
+            questions = []
+        else:
+            # Distribute questions across 3 chapters based on their position
+            questions_per_chapter = total_subject_questions // 3
+            start_idx = (payload.chapter_id - 1) * questions_per_chapter
+            
+            # For the last chapter, include any remainder questions
+            if payload.chapter_id == 3:
+                chapter_questions = all_questions[start_idx:]
+            else:
+                end_idx = start_idx + questions_per_chapter
+                chapter_questions = all_questions[start_idx:end_idx]
+            
+            # Randomly select from the chapter's questions
+            import random
+            if len(chapter_questions) > payload.count:
+                questions = random.sample(chapter_questions, payload.count)
+            else:
+                questions = chapter_questions
+        
+        # Format questions (without exposing correct answers)
+        question_list = []
+        for question in questions:
+            question_data = ChapterQuestionSchema(
+                id=str(question.id),
+                question_text=question.question_text,
+                question_type=question.question_type,
+                subject=question.subject,
+                chapter=chapter_info['name'],
+                topic=question.topic,
+                difficulty_level=question.difficulty_level,
+                level=question.level,
+                options=question.formatted_options,
+                estimated_time_seconds=question.estimated_time_seconds,
+                tags=question.tags
+            )
+            question_list.append(question_data)
+        
+        return ChapterQuestionResponseSchema(
+            success=True,
+            subject=payload.subject,
+            chapter_id=payload.chapter_id,
+            chapter_name=chapter_info['name'],
+            difficulty_level=payload.difficulty_level,
+            requested_count=payload.count,
+            returned_count=len(question_list),
+            questions=question_list
+        )
+        
+    except Exception as e:
+        logger.error(f"Error getting chapter questions: {e}")
+        raise HttpError(500, f"Chapter questions error: {str(e)}")
+
+
+@router.get("/subjects-with-chapters")
+def list_subjects_with_chapters(request):
+    """List all subjects with their chapters and question counts"""
+    try:
+        from assessment.models import AdaptiveQuestion
+        
+        subjects_data = []
+        
+        # Define chapter mappings based on CSV structure
+        chapter_mappings = {
+            'quantitative_aptitude': {
+                'name': 'Quantitative Aptitude',
+                'chapters': [
+                    {'id': 1, 'name': 'Percentages', 'csv_tag': 'percentages'},
+                    {'id': 2, 'name': 'Ratios and Proportions', 'csv_tag': 'ratios_and_proportions'},
+                    {'id': 3, 'name': 'Profit and Loss', 'csv_tag': 'profit_and_loss'}
+                ]
+            },
+            'logical_reasoning': {
+                'name': 'Logical Reasoning',
+                'chapters': [
+                    {'id': 1, 'name': 'Pattern Recognition', 'csv_tag': 'pattern_recognition'},
+                    {'id': 2, 'name': 'Syllogisms', 'csv_tag': 'syllogisms'},
+                    {'id': 3, 'name': 'Data Interpretation General', 'csv_tag': 'data_interpretation_general'}
+                ]
+            },
+            'verbal_ability': {
+                'name': 'Verbal Ability & Reading Comprehension',
+                'chapters': [
+                    {'id': 1, 'name': 'Vocabulary', 'csv_tag': 'vocabulary'},
+                    {'id': 2, 'name': 'Grammar', 'csv_tag': 'grammar'},
+                    {'id': 3, 'name': 'Reading Comprehension', 'csv_tag': 'reading_comprehension'}
+                ]
+            },
+            'data_interpretation': {
+                'name': 'Data Interpretation',
+                'chapters': [
+                    {'id': 1, 'name': 'Bar Charts', 'csv_tag': 'bar_charts'},
+                    {'id': 2, 'name': 'Line Graphs', 'csv_tag': 'line_graphs'},
+                    {'id': 3, 'name': 'Pie Charts', 'csv_tag': 'pie_charts'}
+                ]
+            }
+        }
+        
+        for subject_code, subject_info in chapter_mappings.items():
+            # Get total questions for subject
+            total_questions = AdaptiveQuestion.objects.filter(
+                subject=subject_code, is_active=True
+            ).count()
+            
+            # Get chapter-wise question counts (distribute evenly since CSV tags aren't chapter-specific)
+            chapters_with_counts = []
+            questions_per_chapter = total_questions // len(subject_info['chapters']) if total_questions > 0 else 0
+            remainder = total_questions % len(subject_info['chapters']) if total_questions > 0 else 0
+            
+            for i, chapter in enumerate(subject_info['chapters']):
+                # Distribute questions evenly with remainder distributed to first chapters
+                question_count = questions_per_chapter + (1 if i < remainder else 0)
+                
+                chapters_with_counts.append({
+                    'id': chapter['id'],
+                    'name': chapter['name'],
+                    'question_count': question_count,
+                    'csv_tag': chapter['csv_tag']
+                })
+            
+            # Get difficulty breakdown
+            difficulty_breakdown = {}
+            difficulty_counts = AdaptiveQuestion.objects.filter(
+                subject=subject_code, is_active=True
+            ).values('difficulty_level').annotate(count=Count('id'))
+            
+            for item in difficulty_counts:
+                difficulty_breakdown[item['difficulty_level']] = item['count']
+            
+            subjects_data.append({
+                'subject_code': subject_code,
+                'subject_name': subject_info['name'],
+                'total_questions': total_questions,
+                'chapters': chapters_with_counts,
+                'difficulty_breakdown': difficulty_breakdown
+            })
+        
+        return {
+            'success': True,
+            'total_subjects': len(subjects_data),
+            'subjects': subjects_data
+        }
+        
+    except Exception as e:
+        logger.error(f"Error listing subjects with chapters: {e}")
+        raise HttpError(500, f"Subjects with chapters error: {str(e)}")

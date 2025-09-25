@@ -1,0 +1,155 @@
+{
+  "test_execution": {
+    "timestamp": "2025-09-25T22:17:55.713946",
+    "total_categories": 5,
+    "summary": {
+      "total_passed": 12,
+      "total_failed": 0
+    }
+  },
+  "detailed_results": {
+    "database_schema": {
+      "passed": 2,
+      "failed": 0,
+      "tests": [
+        {
+          "test": "Subjects API Endpoint",
+          "status": "PASS",
+          "message": "Retrieved 4 subjects",
+          "details": {
+            "subjects_count": 4
+          },
+          "timestamp": "2025-09-25T22:17:55.698330"
+        },
+        {
+          "test": "Chapters API Endpoint",
+          "status": "PASS",
+          "message": "Retrieved 10 chapters for subject 1",
+          "details": {
+            "chapters_count": 10
+          },
+          "timestamp": "2025-09-25T22:17:55.703944"
+        }
+      ]
+    },
+    "foreign_keys": {
+      "passed": 1,
+      "failed": 0,
+      "tests": [
+        {
+          "test": "Chapter-Subject Relationship",
+          "status": "PASS",
+          "message": "All chapters properly linked to subject",
+          "details": {
+            "chapters_checked": 10
+          },
+          "timestamp": "2025-09-25T22:17:55.708532"
+        }
+      ]
+    },
+    "student_isolation": {
+      "passed": 3,
+      "failed": 0,
+      "tests": [
+        {
+          "test": "Session Creation - student1",
+          "status": "PASS",
+          "message": "Created session 4fdc4c81...",
+          "details": {
+            "student": "student1",
+            "session_id": "4fdc4c81-8d0e-4891-88d7-e16a6c57d1f8"
+          },
+          "timestamp": "2025-09-25T22:17:55.709309"
+        },
+        {
+          "test": "Session Creation - student2",
+          "status": "PASS",
+          "message": "Created session 49351102...",
+          "details": {
+            "student": "student2",
+            "session_id": "49351102-c986-45f5-b6da-4e3931e67091"
+          },
+          "timestamp": "2025-09-25T22:17:55.709613"
+        },
+        {
+          "test": "Session ID Uniqueness",
+          "status": "PASS",
+          "message": "All session IDs are unique",
+          "details": {
+            "unique_sessions": 2,
+            "total_sessions": 2
+          },
+          "timestamp": "2025-09-25T22:17:55.709772"
+        }
+      ]
+    },
+    "session_management": {
+      "passed": 2,
+      "failed": 0,
+      "tests": [
+        {
+          "test": "Session Data Structure",
+          "status": "PASS",
+          "message": "Valid session structure created",
+          "details": {
+            "session_fields": 8
+          },
+          "timestamp": "2025-09-25T22:17:55.710223"
+        },
+        {
+          "test": "UUID Primary Key Format",
+          "status": "PASS",
+          "message": "Valid UUID format for primary key",
+          "details": {
+            "uuid": "c6f42d87-5fdf-413d-b7fd-f53066fc1a66"
+          },
+          "timestamp": "2025-09-25T22:17:55.710390"
+        }
+      ]
+    },
+    "progress_tracking": {
+      "passed": 4,
+      "failed": 0,
+      "tests": [
+        {
+          "test": "Accuracy Calculation",
+          "status": "PASS",
+          "message": "Expected: 70.0%, Got: 70.0%",
+          "details": {
+            "expected": 70.0,
+            "actual": 70.0
+          },
+          "timestamp": "2025-09-25T22:17:55.710733"
+        },
+        {
+          "test": "Chapter Progress Structure",
+          "status": "PASS",
+          "message": "Chapter progress data structure is valid",
+          "details": {
+            "chapters_tracked": 3
+          },
+          "timestamp": "2025-09-25T22:17:55.711076"
+        },
+        {
+          "test": "Daily Stats Unique Constraint",
+          "status": "PASS",
+          "message": "Unique key generated: student1_2025-09-25",
+          "details": {
+            "unique_key": "student1_2025-09-25"
+          },
+          "timestamp": "2025-09-25T22:17:55.711683"
+        },
+        {
+          "test": "Time Distribution Accuracy",
+          "status": "PASS",
+          "message": "Total time: 1800s, Expected: 1800s",
+          "details": {
+            "calculated_total": 1800,
+            "expected_total": 1800
+          },
+          "timestamp": "2025-09-25T22:17:55.711995"
+        }
+      ]
+    }
+  }
+}

@@ -26,6 +26,10 @@ from student_model.api import router as student_model_router
 from assessment.api import router as assessment_router
 from assessment.competitive_api_v1 import router as competitive_v1_router
 from assessment.enhanced_api_v2 import router as enhanced_v2_router
+from assessment.user_session_api import user_session_router
+from assessment.student_session_api import student_session_router
+from assessment.student_management_api import student_router
+from assessment.multi_student_api import multi_student_router
 from analytics.api import router as analytics_router
 from practice.api import router as practice_router
 from frontend_api import frontend_router
@@ -45,6 +49,10 @@ api.add_router("/student-model/", student_model_router, tags=["Student Model"])
 api.add_router("/assessment/", assessment_router, tags=["Assessment"])
 api.add_router("/competitive/", competitive_v1_router, tags=["Competitive Exam v1"])  # Direct competitive route
 api.add_router("/enhanced/", enhanced_v2_router, tags=["AI-Enhanced Assessment v2"])
+api.add_router("/user-sessions/", user_session_router, tags=["User Sessions"])
+api.add_router("/students/", student_session_router, tags=["Student Sessions"])
+api.add_router("/student-management/", student_router, tags=["Student Management"])
+api.add_router("/multi-student/", multi_student_router, tags=["Multi-Student System"])
 api.add_router("/analytics/", analytics_router, tags=["Analytics"])
 api.add_router("/practice/", practice_router, tags=["Practice"])
 api.add_router("/frontend/", frontend_router, tags=["Frontend API"])
