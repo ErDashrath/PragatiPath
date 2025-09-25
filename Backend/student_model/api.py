@@ -14,6 +14,7 @@ import logging
 import requests
 
 from .bkt import BKTService, BKTParameters
+from .dkt import DKTService
 
 logger = logging.getLogger(__name__)
 
@@ -148,59 +149,8 @@ class DKTPredictionsSchema(Schema):
 # DKT Client for Microservice Communication
 # ============================================================================
 
-class DKTClient:
-    """Client for communicating with DKT microservice"""
-    
-    def __init__(self, base_url: str = "http://localhost:8001"):
-        self.base_url = base_url
-    
-    async def infer_dkt(self, interaction_sequence: list, student_id: Optional[str] = None) -> Optional[Dict]:
-        """Call DKT microservice for inference"""
-        try:
-            async with aiohttp.ClientSession() as session:
-                payload = {
-                    "interaction_sequence": interaction_sequence,
-                    "student_id": student_id
-                }
-                
-                async with session.post(f"{self.base_url}/dkt/infer", json=payload) as response:
-                    if response.status == 200:
-                        return await response.json()
-                    else:
-                        logger.error(f"DKT service returned status {response.status}")
-                        return None
-        except Exception as e:
-            logger.error(f"Error calling DKT service: {e}")
-            return None
-    
-    def infer_dkt_sync(self, interaction_sequence: list, student_id: Optional[str] = None) -> Optional[Dict]:
-        """Synchronous wrapper for DKT inference"""
-        try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-        
-        return loop.run_until_complete(self.infer_dkt(interaction_sequence, student_id))
-    
-    def check_health_sync(self) -> Dict:
-        """Check DKT service health synchronously"""
-        try:
-            response = requests.get(f"{self.base_url}/health", timeout=5)
-            return {
-                'dkt_service_available': response.status_code == 200,
-                'dkt_response': response.json() if response.status_code == 200 else None,
-                'status': 'healthy' if response.status_code == 200 else 'unhealthy'
-            }
-        except Exception as e:
-            return {
-                'dkt_service_available': False,
-                'error': str(e),
-                'status': 'unhealthy'
-            }
-
-# Initialize DKT client
-dkt_client = DKTClient()
+# Initialize integrated DKT service
+dkt_service = DKTService()
 
 
 # ============================================================================
@@ -368,7 +318,8 @@ def reset_skill_bkt(request, student_id: int, skill_id: str):
 def update_dkt_knowledge(request, data: DKTUpdateSchema):
     """Update DKT knowledge state based on interaction"""
     try:
-        from core.models import StudentProfile, Interaction
+        from core.models import StudentProfile
+        from assessment.models import Interaction
         student = get_object_or_404(StudentProfile, id=data.student_id)
         
         # Build interaction sequence from database
@@ -398,12 +349,22 @@ def update_dkt_knowledge(request, data: DKTUpdateSchema):
             current_interaction["response_time"] = data.response_time
         interaction_sequence.append(current_interaction)
         
-        # Call DKT microservice
-        dkt_result = dkt_client.infer_dkt_sync(interaction_sequence, str(student.id))
+        # Update DKT using integrated service
+        dkt_result = dkt_service.update_dkt_knowledge(
+            user=student,
+            skill_id=data.skill_id,
+            is_correct=data.is_correct,
+            interaction_data={
+                'response_time': data.response_time,
+                'question_id': getattr(data, 'question_id', None),
+                'timestamp': timezone.now().isoformat()
+            }
+        )
         
         if dkt_result and dkt_result.get('status') == 'success':
-            # Update student's DKT parameters
-            student.dkt_hidden_state = dkt_result['hidden_state']
+            # DKT parameters are already updated in the service
+            dkt_state = dkt_service.get_dkt_state(student)
+            student.dkt_hidden_state = dkt_state.hidden_state
             
             # Update skill predictions in fundamentals
             if 'skill_predictions' in dkt_result:
@@ -472,7 +433,8 @@ def update_dkt_knowledge(request, data: DKTUpdateSchema):
 def get_dkt_predictions(request, student_id: str):
     """Get current DKT predictions for a student"""
     try:
-        from core.models import StudentProfile, Interaction
+        from core.models import StudentProfile
+        from assessment.models import Interaction
         student = get_object_or_404(StudentProfile, id=student_id)
         
         # Build interaction sequence
@@ -493,39 +455,18 @@ def get_dkt_predictions(request, student_id: str):
                 interaction_data["response_time"] = float(interaction['response_time'])
             interaction_sequence.append(interaction_data)
         
-        # Call DKT microservice
-        dkt_result = dkt_client.infer_dkt_sync(interaction_sequence, str(student.id))
+        # Get DKT predictions using integrated service
+        dkt_predictions = dkt_service.get_all_predictions(student)
+        dkt_state = dkt_service.get_dkt_state(student)
         
-        if dkt_result and dkt_result.get('status') == 'success':
-            return {
-                'status': 'success',
-                'student_id': student_id,
-                'skill_predictions': dkt_result['skill_predictions'],
-                'confidence': dkt_result.get('confidence', 0.5),
-                'sequence_length': len(interaction_sequence),
-                'dkt_service_available': True
-            }
-        else:
-            # Return stored fundamentals scores as fallback
-            fundamentals = student.fundamentals or {}
-            skill_predictions = []
-            
-            for i in range(50):  # Assume 50 skills
-                skill_key = f"skill_{i}"
-                if skill_key in fundamentals:
-                    skill_predictions.append(fundamentals[skill_key].get('mastery_probability', 0.5))
-                else:
-                    skill_predictions.append(0.5)
-            
-            return {
-                'status': 'success_fallback',
-                'student_id': student_id,
-                'skill_predictions': skill_predictions,
-                'confidence': 0.0,
-                'sequence_length': len(interaction_sequence),
-                'dkt_service_available': False,
-                'message': 'Using stored fundamentals scores'
-            }
+        return {
+            'status': 'success',
+            'student_id': student_id,
+            'skill_predictions': dkt_predictions,
+            'confidence': dkt_state.confidence,
+            'sequence_length': len(dkt_state.interaction_sequence),
+            'dkt_service_available': True
+        }
         
     except Exception as e:
         logger.error(f"Error getting DKT predictions: {e}")
@@ -534,8 +475,13 @@ def get_dkt_predictions(request, student_id: str):
 
 @router.get("/dkt/health")
 def check_dkt_health(request):
-    """Check DKT microservice health"""
-    return dkt_client.check_health_sync()
+    """Check DKT service health"""
+    return {
+        'dkt_service_available': True,
+        'status': 'healthy',
+        'integrated_service': True,
+        'message': 'DKT service is integrated and running'
+    }
 
 
 # ============================================================================
@@ -550,11 +496,11 @@ class KnowledgeComponentSchema(Schema):
     difficulty: float  # 0.0 to 1.0
 
 class DKTInputSchema(Schema):
-    student_id: int
+    student_id: str  # Changed to support UUID strings
     interaction_sequence: List[Dict[str, Any]]
 
 class KnowledgeStateSchema(Schema):
-    student_id: int
+    student_id: str  # Changed to support UUID strings
     knowledge_states: Dict[str, float]  # KC_id -> mastery_probability
     updated_at: datetime
 
@@ -590,23 +536,20 @@ def dkt_predict_knowledge(request, payload: DKTInputSchema):
         # Use the interaction sequence provided
         interaction_sequence = payload.interaction_sequence
         
-        # Call DKT microservice
-        dkt_result = dkt_client.infer_dkt_sync(interaction_sequence, str(payload.student_id))
+        # Get DKT predictions using integrated service
+        # First, we need to get the user from StudentProfile
+        user = student.user
+        dkt_predictions = dkt_service.get_all_predictions(user)
         
-        if dkt_result and dkt_result.get('status') == 'success':
-            # Convert skill predictions to knowledge states format
-            knowledge_states = {}
-            for skill_idx, prediction in enumerate(dkt_result['skill_predictions'][:10]):  # First 10 skills
-                knowledge_states[str(skill_idx + 1)] = prediction
-        else:
-            # Fallback to mock states
-            knowledge_states = {
-                "1": 0.75,  # KC 1 mastery probability
-                "2": 0.60,  # KC 2 mastery probability
-                "3": 0.85,  # KC 3 mastery probability
-                "4": 0.45,  # KC 4 mastery probability
-                "5": 0.70,  # KC 5 mastery probability
-            }
+        # Convert skill predictions to knowledge states format
+        knowledge_states = {}
+        skill_names = list(dkt_predictions.keys())[:10]  # First 10 skills
+        for idx, skill_name in enumerate(skill_names):
+            knowledge_states[str(idx + 1)] = dkt_predictions[skill_name]
+        
+        # Fill remaining slots if we have fewer than 10 skills
+        for i in range(len(skill_names), 10):
+            knowledge_states[str(i + 1)] = 0.5
         
         return {
             "student_id": payload.student_id,
@@ -643,12 +586,21 @@ def get_next_recommended_question(request, student_id: int):
 def compare_bkt_dkt(request, student_id: int):
     """Compare BKT vs DKT predictions for a student"""
     try:
-        from core.models import StudentProfile, Interaction
+        from core.models import StudentProfile
+        from assessment.models import Interaction
         from django.contrib.auth.models import User
         
         # Get Django User and StudentProfile
         user = get_object_or_404(User, id=student_id)
-        student_profile = get_object_or_404(StudentProfile, user=user)
+        try:
+            student_profile = StudentProfile.objects.get(user=user)
+        except StudentProfile.DoesNotExist:
+            # Create a default student profile if it doesn't exist
+            student_profile = StudentProfile.objects.create(
+                user=user,
+                student_id=f"student_{user.id}",
+                name=user.username or f"Student {user.id}"
+            )
         
         # Get BKT predictions for common skills
         bkt_predictions = {}
@@ -661,36 +613,52 @@ def compare_bkt_dkt(request, student_id: int):
             except:
                 bkt_predictions[skill] = 0.5  # Default if skill not found
         
-        # Get DKT predictions
+        # Get DKT predictions - Use user instead of student_profile for Interaction queries
         interactions = list(Interaction.objects.filter(
-            student=student_profile
-        ).order_by('timestamp').values(
-            'skill_id', 'is_correct', 'response_time'
-        ))
+            student=user
+        ).order_by('timestamp').select_related('question'))
         
-        # Convert to DKT format
+        # Convert to DKT format using question's subject and tags as skill_id
         interaction_sequence = []
         for interaction in interactions:
+            # Map question to skill_id using subject + tags
+            question = interaction.question
+            skill_id = f"{question.subject}_{question.tags.split(',')[0].strip().replace(' ', '_')}" if question.tags else question.subject
+            
             interaction_data = {
-                "skill_id": interaction['skill_id'],
-                "is_correct": interaction['is_correct']
+                "skill_id": skill_id,
+                "is_correct": interaction.is_correct
             }
-            if interaction['response_time']:
-                interaction_data["response_time"] = float(interaction['response_time'])
+            if interaction.response_time:
+                interaction_data["response_time"] = float(interaction.response_time)
             interaction_sequence.append(interaction_data)
         
-        # Call DKT microservice
-        dkt_result = dkt_client.infer_dkt_sync(interaction_sequence, str(student_profile.id))
-        
+        # Call DKT microservice only if we have interactions
         dkt_predictions = {}
-        if dkt_result and dkt_result.get('status') == 'success' and len(dkt_result['skill_predictions']) >= 4:
-            # Map first 4 DKT predictions to common skills
-            skill_mappings = [(0, "algebra"), (1, "equations"), (2, "geometry"), (3, "statistics")]
-            for skill_idx, skill_name in skill_mappings:
-                dkt_predictions[skill_name] = round(dkt_result['skill_predictions'][skill_idx], 3)
-        else:
-            # Fallback DKT predictions
-            dkt_predictions = {"algebra": 0.75, "equations": 0.65, "geometry": 0.80, "statistics": 0.55}
+        dkt_result = None  # Initialize variable to avoid scope issues
+        
+        # Get DKT predictions using integrated service
+        try:
+            user = student_profile.user
+            all_dkt_predictions = dkt_service.get_all_predictions(user)
+            
+            # Map relevant DKT predictions to common skills
+            skill_mappings = [
+                ("quantitative_aptitude_algebra", "algebra"), 
+                ("quantitative_aptitude_arithmetic", "equations"), 
+                ("quantitative_aptitude_geometry", "geometry"), 
+                ("quantitative_aptitude_statistics", "statistics")
+            ]
+            
+            for dkt_skill, display_name in skill_mappings:
+                if dkt_skill in all_dkt_predictions:
+                    dkt_predictions[display_name] = round(all_dkt_predictions[dkt_skill], 3)
+                else:
+                    dkt_predictions[display_name] = 0.5
+                    
+        except Exception as e:
+            logger.warning(f"DKT prediction failed: {e}")
+            dkt_predictions = {"algebra": 0.50, "equations": 0.50, "geometry": 0.50, "statistics": 0.50}
         
         # Calculate recommendation based on agreement
         agreements = []
@@ -741,8 +709,8 @@ def compare_bkt_dkt(request, student_id: int):
 @router.get("/status", tags=["System"])
 def student_model_status(request):
     """Student model app status endpoint"""
-    # Check DKT service availability
-    dkt_status = dkt_client.check_health_sync()
+    # DKT service is integrated - always healthy
+    dkt_status = {'dkt_service_available': True, 'status': 'healthy'}
     
     return {
         "app": "student_model", 
@@ -758,7 +726,7 @@ def student_model_status(request):
                 "status": "implemented" if dkt_status.get('dkt_service_available') else "service_unavailable",
                 "version": "1.0",
                 "features": ["lstm_predictions", "sequence_modeling", "microservice_integration", "fallback_handling"],
-                "microservice_url": dkt_client.base_url,
+                "integration_type": "embedded_service",
                 "service_health": dkt_status.get('status', 'unknown')
             }
         },

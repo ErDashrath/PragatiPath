@@ -51,6 +51,12 @@ class AdaptiveQuestion(models.Model):
     
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     
+    # PROPER FOREIGN KEY RELATIONSHIPS - SQL STANDARD DESIGN
+    subject_fk = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='questions', 
+                                   null=True, blank=True, help_text="Proper FK to Subject table")
+    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name='questions',
+                               null=True, blank=True, help_text="Proper FK to Chapter table")
+    
     # Question Content
     question_text = models.TextField()
     question_type = models.CharField(max_length=20, choices=QUESTION_TYPES, default='multiple_choice')
@@ -65,7 +71,9 @@ class AdaptiveQuestion(models.Model):
     answer = models.CharField(max_length=1, choices=ANSWER_CHOICES, default='a', help_text="Correct option (a/b/c/d)")
     difficulty_level = models.CharField(max_length=15, choices=DIFFICULTY_CHOICES, default='moderate', help_text="Difficulty from CSV")
     tags = models.TextField(blank=True, help_text="Comma-separated tags from CSV")
-    subject = models.CharField(max_length=25, choices=SUBJECT_CHOICES, default='quantitative_aptitude', help_text="Subject area")
+    
+    # Legacy subject field for backward compatibility during migration
+    subject = models.CharField(max_length=25, choices=SUBJECT_CHOICES, default='quantitative_aptitude', help_text="Legacy subject field - use subject_fk instead")
     
     # Legacy fields for backward compatibility
     correct_answer = models.TextField(blank=True, help_text="Legacy correct answer field")

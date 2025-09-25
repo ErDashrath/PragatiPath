@@ -187,6 +187,10 @@ async def dkt_inference(request: DKTInferenceRequest):
                        f"{len(interaction_sequence)} interactions, "
                        f"confidence: {result.get('confidence', 0):.3f}")
         
+        # Ensure all required fields are present
+        if "sequence_length" not in result:
+            result["sequence_length"] = len(interaction_sequence)
+        
         return DKTInferenceResponse(**result)
         
     except Exception as e:
@@ -207,6 +211,49 @@ async def get_model_info():
     except Exception as e:
         logger.error(f"Error getting model info: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Model info error: {str(e)}")
+
+@app.post("/predict")
+async def predict_legacy(request: dict):
+    """
+    Legacy prediction endpoint for backward compatibility
+    """
+    try:
+        # Handle legacy format
+        sequence = request.get("sequence", [])
+        
+        # Convert legacy format to new format
+        interaction_sequence = []
+        for i, item in enumerate(sequence):
+            skill_name = item.get("skill", f"skill_{i % 50}")
+            
+            # Map skill names to indices (simple hash-based mapping)
+            skill_id = hash(skill_name) % 50
+            
+            interaction_sequence.append({
+                "skill_id": skill_id,
+                "is_correct": item.get("correct", True)
+            })
+        
+        # Use existing service
+        result = dkt_service.infer(interaction_sequence)
+        
+        # Return in legacy format
+        predictions = {}
+        for i, prob in enumerate(result["skill_predictions"]):
+            predictions[f"skill_{i}"] = prob
+            
+        return {
+            "predictions": predictions,
+            "status": "success"
+        }
+        
+    except Exception as e:
+        logger.error(f"Error in legacy predict endpoint: {str(e)}")
+        return {
+            "predictions": {f"skill_{i}": 0.5 for i in range(50)},
+            "status": "error",
+            "error": str(e)
+        }
 
 @app.post("/dkt/batch-infer")
 async def batch_inference(requests: List[DKTInferenceRequest]):

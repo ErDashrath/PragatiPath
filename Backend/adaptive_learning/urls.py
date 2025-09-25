@@ -15,10 +15,13 @@ Including another URLconf
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
 from django.contrib import admin
-from django.urls import path
+from django.urls import path, include
 from ninja import NinjaAPI
 from django.conf import settings
 from django.conf.urls.static import static
+
+# Import simple frontend API - direct import since it's at Backend root
+import simple_frontend_api
 
 # Import app routers
 from core.api import router as core_router
@@ -30,6 +33,11 @@ from assessment.user_session_api import user_session_router
 from assessment.student_session_api import student_session_router
 from assessment.student_management_api import student_router
 from assessment.multi_student_api import multi_student_router
+from assessment.assessment_api import assessment_router as full_assessment_router
+from assessment.history_api import history_router
+from assessment.adaptive_api import adaptive_router
+from orchestration.api import orchestration_router
+from orchestration.frontend_api import frontend_orchestration_router
 from analytics.api import router as analytics_router
 from practice.api import router as practice_router
 from frontend_api import frontend_router
@@ -53,6 +61,11 @@ api.add_router("/user-sessions/", user_session_router, tags=["User Sessions"])
 api.add_router("/students/", student_session_router, tags=["Student Sessions"])
 api.add_router("/student-management/", student_router, tags=["Student Management"])
 api.add_router("/multi-student/", multi_student_router, tags=["Multi-Student System"])
+api.add_router("/full-assessment/", full_assessment_router, tags=["Complete Assessment System"])
+api.add_router("/history/", history_router, tags=["Assessment History"])
+api.add_router("/adaptive/", adaptive_router, tags=["Adaptive BKT/DKT System"])
+api.add_router("/orchestration/", orchestration_router, tags=["LangGraph Orchestration"])
+api.add_router("/frontend-orchestration/", frontend_orchestration_router, tags=["Frontend-Compatible Orchestration"])
 api.add_router("/analytics/", analytics_router, tags=["Analytics"])
 api.add_router("/practice/", practice_router, tags=["Practice"])
 api.add_router("/frontend/", frontend_router, tags=["Frontend API"])
@@ -69,6 +82,12 @@ def health_check(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', api.urls),
+    # Simple Direct Frontend API Endpoints
+    path('simple/start-session/', simple_frontend_api.start_simple_session, name='start_simple_session'),
+    path('simple/get-question/<str:session_id>/', simple_frontend_api.get_simple_question, name='get_simple_question'),
+    path('simple/submit-answer/', simple_frontend_api.submit_simple_answer, name='submit_simple_answer'),
+    path('simple/session-progress/<str:session_id>/', simple_frontend_api.get_session_progress, name='get_session_progress'),
+    path('simple/health/', simple_frontend_api.api_health, name='simple_api_health'),
 ]
 
 # Serve media files during development

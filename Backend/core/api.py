@@ -95,31 +95,79 @@ def get_student(request, student_id: str):
 @router.post("/students", response=StudentSchema)
 def create_student(request, payload: StudentCreateSchema):
     """Create a new student"""
-    # TODO: Implement actual database creation
+    from django.contrib.auth.models import User
+    from core.models import StudentProfile
+    
+    # Create User first
+    user = User.objects.create_user(
+        username=payload.username,
+        email=payload.email,
+        first_name=payload.full_name.split()[0] if payload.full_name else "",
+        last_name=" ".join(payload.full_name.split()[1:]) if len(payload.full_name.split()) > 1 else ""
+    )
+    
+    # Create StudentProfile
+    student_profile = StudentProfile.objects.create(
+        user=user,
+        bkt_parameters={},
+        dkt_hidden_state=[],
+        fundamentals={
+            'listening': 0.5,
+            'grasping': 0.5,
+            'retention': 0.5,
+            'application': 0.5
+        },
+        interaction_history=[]
+    )
+    
     return {
-        "id": 1,
-        "username": payload.username,
-        "email": payload.email,
+        "id": str(student_profile.id),  # Convert to string
+        "username": user.username,
+        "email": user.email,
         "full_name": payload.full_name,
-        "created_at": datetime.now()
+        "created_at": user.date_joined
     }
 
 @router.put("/students/{student_id}", response=StudentSchema)
-def update_student(request, student_id: int, payload: StudentUpdateSchema):
+def update_student(request, student_id: str, payload: StudentUpdateSchema):
     """Update an existing student"""
-    # TODO: Implement actual database update
+    from core.models import StudentProfile
+    
+    student_profile = get_object_or_404(StudentProfile, id=student_id)
+    user = student_profile.user
+    
+    # Update user fields
+    if payload.username:
+        user.username = payload.username
+    if payload.email:
+        user.email = payload.email
+    if payload.full_name:
+        names = payload.full_name.split()
+        user.first_name = names[0] if names else ""
+        user.last_name = " ".join(names[1:]) if len(names) > 1 else ""
+    
+    user.save()
+    
     return {
-        "id": student_id,
-        "username": payload.username or "john_doe",
-        "email": payload.email or "john@example.com",
-        "full_name": payload.full_name or "John Doe",
-        "created_at": datetime.now()
+        "id": str(student_profile.id),
+        "username": user.username,
+        "email": user.email,
+        "full_name": f"{user.first_name} {user.last_name}".strip(),
+        "created_at": user.date_joined
     }
 
 @router.delete("/students/{student_id}")
-def delete_student(request, student_id: int):
+def delete_student(request, student_id: str):
     """Delete a student"""
-    # TODO: Implement actual database deletion
+    from core.models import StudentProfile
+    
+    student_profile = get_object_or_404(StudentProfile, id=student_id)
+    user = student_profile.user
+    
+    # Delete both StudentProfile and User
+    student_profile.delete()
+    user.delete()
+    
     return {"message": f"Student {student_id} deleted successfully"}
 
 @router.get("/status")

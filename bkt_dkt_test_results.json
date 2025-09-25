@@ -1,0 +1,436 @@
+{
+  "main_api": {
+    "status": "pass",
+    "response_time": 2.043178,
+    "data": {
+      "status": "ok",
+      "message": "Adaptive Learning System is running",
+      "version": "1.0.0"
+    }
+  },
+  "student_model": {
+    "status": "pass",
+    "response_time": 4.097683,
+    "data": {
+      "app": "student_model",
+      "status": "ready",
+      "description": "BKT and DKT knowledge tracing algorithms with microservice integration",
+      "algorithms": {
+        "bkt": {
+          "status": "implemented",
+          "version": "1.0",
+          "features": [
+            "bayesian_update",
+            "mastery_tracking",
+            "skill_reset",
+            "django_integration"
+          ]
+        },
+        "dkt": {
+          "status": "implemented",
+          "version": "1.0",
+          "features": [
+            "lstm_predictions",
+            "sequence_modeling",
+            "microservice_integration",
+            "fallback_handling"
+          ],
+          "microservice_url": "http://localhost:8001",
+          "service_health": "healthy"
+        }
+      },
+      "integration": {
+        "django_ninja": "enabled",
+        "microservice_architecture": "enabled",
+        "fallback_mechanisms": "enabled",
+        "database_models": "core.models.StudentProfile"
+      }
+    }
+  },
+  "dkt_service": {
+    "status": "pass",
+    "response_time": 4.143517,
+    "data": {
+      "dkt_service_available": true,
+      "dkt_response": {
+        "status": "healthy",
+        "service": "dkt-microservice",
+        "model_loaded": true,
+        "mock_mode": false
+      },
+      "status": "healthy"
+    }
+  },
+  "adaptive_algorithms": {
+    "status": "pass",
+    "response_time": 4.085385,
+    "data": {
+      "status": "operational",
+      "algorithms": {
+        "bkt": {
+          "status": "active",
+          "active_students": 0,
+          "features": [
+            "bayesian_tracking",
+            "mastery_detection",
+            "skill_progression"
+          ]
+        },
+        "dkt": {
+          "status": "active",
+          "service_health": "healthy",
+          "features": [
+            "lstm_predictions",
+            "sequence_modeling",
+            "pattern_recognition"
+          ]
+        }
+      },
+      "question_database": {
+        "total_questions": 550,
+        "subjects": [
+          "data_interpretation",
+          "logical_reasoning",
+          "quantitative_aptitude",
+          "verbal_ability"
+        ]
+      },
+      "adaptive_selection": {
+        "enabled": true,
+        "fallback_available": true,
+        "real_time_adaptation": true
+      }
+    }
+  },
+  "bkt_algorithm": {
+    "status": "pass",
+    "initial_state": {
+      "student_id": 1,
+      "skill_id": "algebra_test",
+      "bkt_parameters": {
+        "P_L0": 0.1,
+        "P_T": 0.3,
+        "P_G": 0.2,
+        "P_S": 0.1,
+        "P_L": 0.8231057312569241
+      },
+      "is_mastered": false,
+      "mastery_threshold": 0.95,
+      "updated_at": "2025-09-26T02:02:20.770"
+    },
+    "updated_state": {
+      "student_id": 1,
+      "skill_id": "algebra_test",
+      "bkt_parameters": {
+        "P_L0": 0.1,
+        "P_T": 0.3,
+        "P_G": 0.2,
+        "P_S": 0.1,
+        "P_L": 0.9680932403752468
+      },
+      "is_mastered": true,
+      "mastery_threshold": 0.95,
+      "updated_at": "2025-09-26T02:02:22.808"
+    },
+    "all_states": {
+      "student_id": "f99255ca-9d5a-4550-95bb-ba2203b2d551",
+      "skill_states": {
+        "algebra_basics": {
+          "P_L0": 0.1,
+          "P_T": 0.2,
+          "P_G": 0.15,
+          "P_S": 0.05,
+          "P_L": 0.85,
+          "is_mastered": true
+        },
+        "linear_equations": {
+          "P_L0": 0.15,
+          "P_T": 0.25,
+          "P_G": 0.12,
+          "P_S": 0.08,
+          "P_L": 0.72,
+          "is_mastered": false
+        }
+      },
+      "mastered_skills": [
+        "algebra_basics"
+      ],
+      "total_skills": 2,
+      "mastery_rate": 0.5,
+      "last_updated": "2025-09-25T04:00:00Z"
+    },
+    "mastered_skills": {
+      "student_id": "1",
+      "threshold": 0.95,
+      "mastered_skills": [
+        {
+          "skill_id": "algebra_basics",
+          "skill_name": "Algebra Basics",
+          "mastery_probability": 0.98,
+          "mastered_at": "2025-09-24T10:00:00Z"
+        }
+      ],
+      "total_mastered": 1,
+      "total_skills": 5,
+      "mastery_percentage": 20.0
+    },
+    "parameters_updated": true
+  },
+  "dkt_microservice": {
+    "status": "fail",
+    "update_result": null,
+    "predictions": null,
+    "comparison": {
+      "student_id": 1,
+      "bkt_predictions": {
+        "algebra": 0.1,
+        "equations": 0.1,
+        "geometry": 0.1,
+        "statistics": 0.1
+      },
+      "dkt_predictions": {
+        "algebra": 0.5,
+        "equations": 0.5,
+        "geometry": 0.5,
+        "statistics": 0.5
+      },
+      "recommended_algorithm": "bkt",
+      "reasoning": "Insufficient data for DKT, BKT better for cold start",
+      "confidence": 0.6,
+      "interaction_count": 0,
+      "dkt_service_available": false
+    },
+    "service_available": null
+  },
+  "adaptive_selection": {
+    "status": "pass",
+    "recommendations": {
+      "student_id": "1",
+      "recommendations": [],
+      "algorithm_used": "bkt",
+      "confidence": 0.5,
+      "reason": "Focusing on skills needing practice: arithmetic_basics, algebra_equations, geometry_mensuration"
+    },
+    "knowledge_state": {
+      "student_id": "1",
+      "subject_code": "MATH",
+      "bkt_skills": {
+        "arithmetic_basics": {
+          "P_L0": 0.1,
+          "P_T": 0.3,
+          "P_G": 0.2,
+          "P_S": 0.1,
+          "P_L": 0.1,
+          "is_mastered": 0.0
+        },
+        "algebra_equations": {
+          "P_L0": 0.1,
+          "P_T": 0.3,
+          "P_G": 0.2,
+          "P_S": 0.1,
+          "P_L": 0.1,
+          "is_mastered": 0.0
+        },
+        "geometry_mensuration": {
+          "P_L0": 0.1,
+          "P_T": 0.3,
+          "P_G": 0.2,
+          "P_S": 0.1,
+          "P_L": 0.1,
+          "is_mastered": 0.0
+        }
+      },
+      "dkt_predictions": [],
+      "recommended_algorithm": "bkt",
+      "confidence": 0.5,
+      "total_interactions": 0,
+      "last_updated": "2025-09-25T20:32:40.005689+00:00"
+    },
+    "selection_trace": {
+      "student_id": "1",
+      "total_attempts": 0,
+      "algorithm_choice_logic": {
+        "cold_start": true,
+        "dkt_available": false,
+        "recommended_algorithm": "bkt"
+      },
+      "bkt_analysis": {
+        "arithmetic_basics": {
+          "mastery_probability": 0.1,
+          "needs_practice": true,
+          "mastered": false
+        },
+        "algebra_equations": {
+          "mastery_probability": 0.1,
+          "needs_practice": true,
+          "mastered": false
+        },
+        "geometry_mensuration": {
+          "mastery_probability": 0.1,
+          "needs_practice": true,
+          "mastered": false
+        }
+      },
+      "dkt_analysis": {
+        "available": false,
+        "reason": "Service unavailable"
+      },
+      "selection_strategy": "Using BKT: Focus on skills with low mastery probability"
+    },
+    "algorithm_used": "bkt"
+  },
+  "knowledge_integration": {
+    "status": "pass",
+    "progress_analytics": {
+      "student_id": "1",
+      "subjects_attempted": [
+        "data_interpretation",
+        "logical_reasoning",
+        "quantitative_aptitude",
+        "verbal_ability"
+      ],
+      "subject_analysis": {
+        "data_interpretation": {
+          "overall_mastery": 0.1,
+          "mastered_skills": [],
+          "skills_needing_practice": [
+            "table_chart",
+            "bar_graph",
+            "pie_chart",
+            "line_graph",
+            "percentage_calculation",
+            "ratio_analysis",
+            "trend_analysis",
+            "comparative_analysis",
+            "data_extraction",
+            "statistical_interpretation",
+            "data_interpretation_pie_chart",
+            "data_interpretation_line_graph",
+            "data_interpretation_bar_chart"
+          ],
+          "total_skills_tracked": 13,
+          "recommended_algorithm": "bkt",
+          "confidence": 0.5
+        },
+        "logical_reasoning": {
+          "overall_mastery": 0.1,
+          "mastered_skills": [],
+          "skills_needing_practice": [
+            "number_series",
+            "coding_decoding",
+            "blood_relations",
+            "direction_sense",
+            "syllogism",
+            "classification",
+            "logical_sequence",
+            "puzzles",
+            "seating_arrangement",
+            "ranking_order",
+            "pattern_recognition",
+            "logical_reasoning_pattern_recognition",
+            "logical_reasoning_syllogism"
+          ],
+          "total_skills_tracked": 13,
+          "recommended_algorithm": "bkt",
+          "confidence": 0.5
+        },
+        "quantitative_aptitude": {
+          "overall_mastery": 0.1,
+          "mastered_skills": [],
+          "skills_needing_practice": [
+            "arithmetic_basics",
+            "percentage_profit_loss",
+            "time_work_distance",
+            "algebra_equations",
+            "geometry_mensuration",
+            "probability_statistics",
+            "number_systems",
+            "simplification",
+            "ratio_proportion",
+            "interest_calculations",
+            "quantitative_aptitude_ratio_and_proportion",
+            "quantitative_aptitude_percentages",
+            "quantitative_aptitude_profit_and_loss"
+          ],
+          "total_skills_tracked": 13,
+          "recommended_algorithm": "bkt",
+          "confidence": 0.5
+        },
+        "verbal_ability": {
+          "overall_mastery": 0.1,
+          "mastered_skills": [],
+          "skills_needing_practice": [
+            "reading_comprehension",
+            "vocabulary",
+            "grammar_usage",
+            "sentence_correction",
+            "para_jumbles",
+            "fill_blanks",
+            "synonyms_antonyms",
+            "idioms_phrases",
+            "error_detection",
+            "cloze_test",
+            "critical_reasoning",
+            "verbal_ability_reading_comprehension",
+            "verbal_ability_vocabulary",
+            "verbal_ability_grammar"
+          ],
+          "total_skills_tracked": 14,
+          "recommended_algorithm": "bkt",
+          "confidence": 0.5
+        }
+      },
+      "recent_performance": {
+        "total_recent_attempts": 0,
+        "accuracy": 0,
+        "avg_response_time": 0
+      }
+    },
+    "realtime_update": null,
+    "subjects_tracked": [
+      "data_interpretation",
+      "logical_reasoning",
+      "quantitative_aptitude",
+      "verbal_ability"
+    ]
+  },
+  "realtime_adaptation": {
+    "status": "fail",
+    "assessment_start": null,
+    "adaptation_sequence": [],
+    "questions_adapted": 0
+  },
+  "algorithm_comparison": {
+    "status": "pass",
+    "comparison_result": {
+      "student_id": 1,
+      "bkt_predictions": {
+        "algebra": 0.1,
+        "equations": 0.1,
+        "geometry": 0.1,
+        "statistics": 0.1
+      },
+      "dkt_predictions": {
+        "algebra": 0.5,
+        "equations": 0.5,
+        "geometry": 0.5,
+        "statistics": 0.5
+      },
+      "recommended_algorithm": "bkt",
+      "reasoning": "Insufficient data for DKT, BKT better for cold start",
+      "confidence": 0.6,
+      "interaction_count": 0,
+      "dkt_service_available": false
+    },
+    "next_question_recommendation": {
+      "recommended_question_id": "q42",
+      "skill_id": "algebra_linear_equations",
+      "difficulty_level": 0.6,
+      "reasoning": "Student needs more practice with linear equations (P_L = 0.75)",
+      "confidence": 0.85
+    },
+    "bkt_available": true,
+    "dkt_available": true,
+    "recommended_algorithm": "bkt"
+  }
+}

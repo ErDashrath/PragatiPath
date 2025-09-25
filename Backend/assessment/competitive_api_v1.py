@@ -160,11 +160,26 @@ def start_subject_assessment(request, payload: StartSubjectAssessmentSchema):
         from core.models import StudentProfile
         from assessment.models import AdaptiveQuestion
         
-        # Get student profile
+        # Get student profile - try both User ID and StudentProfile ID
+        student_profile = None
         try:
+            # First try as StudentProfile ID
             student_profile = StudentProfile.objects.get(id=payload.student_id)
         except StudentProfile.DoesNotExist:
-            raise HttpError(404, f"Student {payload.student_id} not found")
+            try:
+                # Then try as User ID and get/create StudentProfile
+                from django.contrib.auth.models import User
+                user = User.objects.get(id=payload.student_id)
+                student_profile, created = StudentProfile.objects.get_or_create(
+                    user=user,
+                    defaults={
+                        'student_id': f'student_{user.id}',
+                        'name': user.username or f'Student {user.id}',
+                        'subject_progress': {}
+                    }
+                )
+            except User.DoesNotExist:
+                raise HttpError(404, f"Student {payload.student_id} not found")
         
         # Get or create subject-specific progress
         subject_progress = student_profile.subject_progress.get(payload.subject, {
@@ -192,24 +207,64 @@ def start_subject_assessment(request, payload: StartSubjectAssessmentSchema):
         # Generate assessment ID
         assessment_id = str(uuid.uuid4())
         
-        # Get next question for current difficulty
-        available_questions = AdaptiveQuestion.objects.filter(
-            subject=payload.subject,
-            difficulty_level=current_difficulty,
-            is_active=True
-        ).order_by('?')[:1]
+        # Use adaptive question selection based on BKT/DKT analysis
+        from .adaptive_question_selector import adaptive_selector
+        
+        # Create a mock session for adaptive selection
+        mock_session = type('MockSession', (), {
+            'student': student_profile.user,
+            'subject_code': payload.subject,
+            'assessment_type': 'COMPETITIVE'
+        })()
+        
+        # Get adaptive question selection
+        selected_questions = adaptive_selector.select_questions(
+            user=student_profile.user,
+            subject_code=payload.subject,
+            chapter_id=None,  # Competitive exams aren't chapter-specific
+            question_count=1,
+            assessment_type='COMPETITIVE',
+            session=mock_session
+        )
         
         next_question = None
-        if available_questions:
-            question = available_questions[0]
+        if selected_questions:
+            question_data = selected_questions[0]
             next_question = {
-                "id": str(question.id),
-                "question_text": question.question_text,
-                "options": question.formatted_options,
-                "difficulty": current_difficulty,
-                "estimated_time": question.estimated_time_seconds,
-                "question_number": subject_progress['questions_attempted'] + 1
+                "id": question_data['id'],
+                "question_text": question_data['question_text'],
+                "options": question_data['options'],
+                "difficulty": question_data.get('difficulty', current_difficulty),
+                "estimated_time": question_data.get('estimated_time', 60),
+                "question_number": subject_progress['questions_attempted'] + 1,
+                "adaptive_info": {
+                    "selection_algorithm": question_data.get('selection_algorithm', 'adaptive'),
+                    "target_skills": question_data.get('target_skills', []),
+                    "selection_confidence": question_data.get('adaptive_metadata', {}).get('recommendation_confidence', 0.5)
+                }
             }
+        else:
+            # Fallback to difficulty-based selection if adaptive fails
+            available_questions = AdaptiveQuestion.objects.filter(
+                subject=payload.subject,
+                difficulty_level=current_difficulty,
+                is_active=True
+            ).order_by('?')[:1]
+            
+            if available_questions:
+                question = available_questions[0]
+                next_question = {
+                    "id": str(question.id),
+                    "question_text": question.question_text,
+                    "options": question.formatted_options,
+                    "difficulty": current_difficulty,
+                    "estimated_time": question.estimated_time_seconds,
+                    "question_number": subject_progress['questions_attempted'] + 1,
+                    "adaptive_info": {
+                        "selection_algorithm": "fallback_random",
+                        "reason": "adaptive_selection_failed"
+                    }
+                }
         
         return StartAssessmentResponseSchema(
             success=True,
@@ -237,9 +292,27 @@ def submit_competitive_answer(request, payload: CompetitiveSubmitAnswerSchema):
         from student_model.bkt import BKTService
         
         with transaction.atomic():
-            # Get student and question
+            # Get student and question - handle both User ID and StudentProfile ID
             try:
+                # First try as StudentProfile ID
                 student_profile = StudentProfile.objects.get(id=payload.student_id)
+            except StudentProfile.DoesNotExist:
+                try:
+                    # Then try as User ID
+                    from django.contrib.auth.models import User
+                    user = User.objects.get(id=payload.student_id)
+                    student_profile, created = StudentProfile.objects.get_or_create(
+                        user=user,
+                        defaults={
+                            'student_id': f'student_{user.id}',
+                            'name': user.username or f'Student {user.id}',
+                            'subject_progress': {}
+                        }
+                    )
+                except User.DoesNotExist:
+                    raise HttpError(404, f"Student {payload.student_id} not found")
+            
+            try:
                 question = AdaptiveQuestion.objects.get(id=payload.question_id)
             except (StudentProfile.DoesNotExist, AdaptiveQuestion.DoesNotExist) as e:
                 raise HttpError(404, str(e))
@@ -273,6 +346,45 @@ def submit_competitive_answer(request, payload: CompetitiveSubmitAnswerSchema):
                     'timestamp': timezone.now().isoformat()
                 }
             )
+            
+            # Update DKT knowledge state
+            try:
+                from student_model.api import dkt_client
+                from .adaptive_question_selector import adaptive_selector
+                
+                # Map question to DKT skill ID
+                dkt_skill_id = adaptive_selector._map_question_to_skill_id(question)
+                
+                # Update DKT asynchronously (non-blocking)
+                dkt_update_data = {
+                    'student_id': str(student_profile.id),
+                    'skill_id': dkt_skill_id,
+                    'is_correct': is_correct,
+                    'response_time': payload.response_time
+                }
+                
+                # Call DKT update in background
+                import asyncio
+                try:
+                    loop = asyncio.get_event_loop()
+                except RuntimeError:
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                
+                # Non-blocking DKT update
+                loop.run_in_executor(
+                    None,
+                    lambda: dkt_client.infer_dkt_sync(
+                        adaptive_selector._build_interaction_sequence(student_profile.user),
+                        str(student_profile.id)
+                    )
+                )
+                
+                logger.info(f"DKT update initiated for student {student_profile.id}, skill {dkt_skill_id}")
+                
+            except Exception as dkt_error:
+                logger.warning(f"DKT update failed (non-critical): {dkt_error}")
+                # Continue execution - DKT failure shouldn't break the flow
             
             # Get/update subject progress
             subject_progress = student_profile.subject_progress.get(payload.subject, {
