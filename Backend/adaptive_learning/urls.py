@@ -41,6 +41,7 @@ from orchestration.frontend_api import frontend_orchestration_router
 from analytics.api import router as analytics_router
 from practice.api import router as practice_router
 from frontend_api import frontend_router
+from assessment.reports_api import reports_router
 
 # Create the main API instance with enhanced configuration
 api = NinjaAPI(
@@ -69,6 +70,7 @@ api.add_router("/frontend-orchestration/", frontend_orchestration_router, tags=[
 api.add_router("/analytics/", analytics_router, tags=["Analytics"])
 api.add_router("/practice/", practice_router, tags=["Practice"])
 api.add_router("/frontend/", frontend_router, tags=["Frontend API"])
+api.add_router("/reports/", reports_router, tags=["Reports & Analytics"])
 
 @api.get("/health", tags=["System"])
 def health_check(request):

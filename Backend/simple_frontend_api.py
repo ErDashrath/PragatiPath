@@ -21,12 +21,14 @@ from django.views.decorators.http import require_http_methods
 from django.shortcuts import get_object_or_404
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.db import models
 import json
 import uuid
 import logging
 
 from core.models import StudentProfile
 from assessment.models import StudentSession, QuestionAttempt
+from assessment.adaptive_submission_models import AdaptiveSubmission, AdaptiveSubmissionAnalyzer
 from student_model.bkt import BKTService
 from student_model.dkt import DKTService
 
@@ -229,10 +231,10 @@ def get_simple_question(request, session_id):
                     {'id': 'C', 'text': real_question.option_c},
                     {'id': 'D', 'text': real_question.option_d}
                 ],
-                'correct_answer': real_question.correct_answer,
-                'explanation': real_question.explanation or f'This {difficulty} question was selected based on your mastery level of {mastery_level:.1%}',
-                'topic': real_question.topic,
-                'subtopic': real_question.subtopic,
+                'correct_answer': real_question.answer.upper(),
+                'explanation': f'This {difficulty} {subject_obj.name} question was selected based on your mastery level of {mastery_level:.1%}',
+                'topic': getattr(real_question, 'tags', '').split(',')[0] if getattr(real_question, 'tags', '') else 'General',
+                'subtopic': real_question.question_type,
                 'adaptive_info': {
                     'mastery_level': mastery_level,
                     'skill_id': skill_id,
@@ -322,47 +324,150 @@ def submit_simple_answer(request):
             }, status=400)
         subject = session.session_config.get('subject', 'mathematics')
         
-        # For demo, assume A is always correct
-        is_correct = (selected_answer == 'A')
+        # Will determine correct answer after getting question
         
-        # Create question attempt record
-        # Note: QuestionAttempt requires a question FK, but we're using question_id as string
-        # For now, create a simplified record
+        # Handle question record for attempt
         from assessment.models import AdaptiveQuestion
         
-        # Get or create a dummy question for the attempt
-        dummy_question, created = AdaptiveQuestion.objects.get_or_create(
-            id=question_id,
-            defaults={
-                'question_text': f'Simple API Question {question_id}',
-                'question_type': 'multiple_choice',
-                'correct_answer': 'A',
-                'difficulty_level': 'medium',
-                'subject': subject,
-                'chapter': 'General',
-                'options': ['A', 'B', 'C', 'D']
-            }
-        )
+        # Check if this is a real question (starts with "real_")
+        if question_id.startswith("real_"):
+            # Extract the actual question ID and clean it
+            actual_question_id = question_id.replace("real_", "")
+            
+            # Clean the UUID string - remove any non-UUID characters
+            import re
+            import uuid
+            
+            # Remove quotes, spaces, and other invalid characters
+            cleaned_id = re.sub(r'[^\w\-]', '', actual_question_id.strip())
+            
+            logger.info(f"Original question_id: {question_id}")
+            logger.info(f"Extracted ID: '{actual_question_id}'")
+            logger.info(f"Cleaned ID: '{cleaned_id}'")
+            
+            try:
+                # Convert string to UUID
+                actual_uuid = uuid.UUID(cleaned_id)
+                logger.info(f"Successfully created UUID: {actual_uuid}")
+                
+                # Get the existing real question
+                question_for_attempt = AdaptiveQuestion.objects.get(id=actual_uuid)
+                correct_answer = question_for_attempt.answer.upper()
+                logger.info(f"Found question: {question_for_attempt.id}, Answer: {correct_answer}")
+                
+            except ValueError as ve:
+                logger.error(f"UUID conversion failed: {ve}")
+                logger.error(f"Problematic string: '{cleaned_id}' (length: {len(cleaned_id)})")
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Invalid UUID format: {str(ve)}',
+                    'message': f'Question ID "{cleaned_id}" is not a valid UUID format',
+                    'debug_info': {
+                        'original_id': question_id,
+                        'extracted_id': actual_question_id,
+                        'cleaned_id': cleaned_id,
+                        'id_length': len(cleaned_id)
+                    }
+                }, status=400)
+            except AdaptiveQuestion.DoesNotExist:
+                logger.error(f"Question not found: {actual_uuid}")
+                return JsonResponse({
+                    'success': False,
+                    'error': 'Real question not found in database',
+                    'message': f'Question with UUID {actual_uuid} not found in database'
+                }, status=400)
+        else:
+            # For adaptive dummy questions, create a simple record
+            # Generate a unique UUID for the dummy question
+            import uuid
+            dummy_uuid = uuid.uuid4()
+            
+            # Try to get existing dummy question first, or create new one
+            try:
+                # Check if we already created a dummy question for this question_id
+                existing_dummy = AdaptiveQuestion.objects.filter(
+                    question_text__contains=f'Simple API Question {question_id}'
+                ).first()
+                
+                if existing_dummy:
+                    question_for_attempt = existing_dummy
+                else:
+                    # Create new dummy question
+                    question_for_attempt = AdaptiveQuestion.objects.create(
+                        id=dummy_uuid,
+                        question_text=f'Simple API Question {question_id}',
+                        question_type='multiple_choice',
+                        answer='A',
+                        difficulty_level='medium',
+                        subject_fk=session.subject if session.subject else None,
+                        option_a='Option A',
+                        option_b='Option B', 
+                        option_c='Option C',
+                        option_d='Option D'
+                    )
+                    
+            except Exception as e:
+                logger.error(f"Error creating dummy question: {e}")
+                return JsonResponse({
+                    'success': False,
+                    'error': f'Failed to create question record: {str(e)}',
+                    'message': 'Could not create question for submission'
+                }, status=500)
+                
+            correct_answer = 'A'
+        
+        # Determine correct answer based on question type
+        is_correct = (selected_answer.upper() == correct_answer.upper())
         
         attempt = QuestionAttempt.objects.create(
             session=session,
-            question=dummy_question,
+            question=question_for_attempt,
             student=session.student,
             question_number_in_session=QuestionAttempt.objects.filter(session=session).count() + 1,
             student_answer=selected_answer,
-            correct_answer='A',
+            correct_answer=correct_answer,
             is_correct=is_correct,
             time_spent_seconds=time_spent,
-            difficulty_when_presented=dummy_question.difficulty_level,
+            difficulty_when_presented=question_for_attempt.difficulty_level,
             interaction_data={
                 'simple_api': True,
                 'adaptive_submission': True,
-                'question_id_string': question_id
+                'question_id_string': question_id,
+                'real_question': question_id.startswith("real_")
             }
         )
         
-        # Update knowledge models
+        # Get knowledge state before updates
         skill_id = f"{subject}_skill_{QuestionAttempt.objects.filter(session=session).count()}"
+        
+        # Get BKT state before update
+        try:
+            bkt_before = bkt_service.get_skill_bkt_params(session.student, skill_id)
+            bkt_mastery_before = bkt_before.P_L if bkt_before else 0.5
+            bkt_params_before = {
+                'P_L': bkt_before.P_L if bkt_before else 0.5,
+                'P_T': bkt_before.P_T if bkt_before else 0.3,
+                'P_G': bkt_before.P_G if bkt_before else 0.2,
+                'P_S': bkt_before.P_S if bkt_before else 0.1
+            }
+        except:
+            bkt_mastery_before = 0.5
+            bkt_params_before = {'P_L': 0.5, 'P_T': 0.3, 'P_G': 0.2, 'P_S': 0.1}
+        
+        # Get DKT state before update
+        try:
+            dkt_prediction_before = dkt_service.get_skill_prediction(session.student, skill_id)
+        except:
+            dkt_prediction_before = 0.5
+        
+        # Get session accuracy before this submission
+        previous_attempts = QuestionAttempt.objects.filter(session=session)
+        if previous_attempts.exists():
+            correct_before = previous_attempts.filter(is_correct=True).count()
+            total_before = previous_attempts.count()
+            session_accuracy_before = correct_before / total_before
+        else:
+            session_accuracy_before = 0.0
         
         # Update BKT
         try:
@@ -375,11 +480,18 @@ def submit_simple_answer(request):
             bkt_updated = True
             # Get updated mastery
             updated_bkt = bkt_service.get_skill_bkt_params(session.student, skill_id)
-            new_mastery = updated_bkt.P_L if updated_bkt else 0.5
+            new_mastery = updated_bkt.P_L if updated_bkt else bkt_mastery_before
+            bkt_params_after = {
+                'P_L': updated_bkt.P_L if updated_bkt else 0.5,
+                'P_T': updated_bkt.P_T if updated_bkt else 0.3,
+                'P_G': updated_bkt.P_G if updated_bkt else 0.2,
+                'P_S': updated_bkt.P_S if updated_bkt else 0.1
+            }
         except Exception as e:
             logger.warning(f"BKT update failed: {e}")
             bkt_updated = False
-            new_mastery = 0.5
+            new_mastery = bkt_mastery_before
+            bkt_params_after = bkt_params_before
         
         # Update DKT 
         try:
@@ -390,27 +502,97 @@ def submit_simple_answer(request):
                 interaction_data={'question_id': question_id, 'time_spent': time_spent}
             )
             dkt_updated = True
-            dkt_prediction = dkt_service.get_skill_prediction(session.student, skill_id)
+            dkt_prediction_after = dkt_service.get_skill_prediction(session.student, skill_id)
         except Exception as e:
             logger.warning(f"DKT update failed: {e}")
             dkt_updated = False
-            dkt_prediction = 0.5
+            dkt_prediction_after = dkt_prediction_before
         
-        # Calculate session progress
+        # Calculate session progress after this submission
         total_questions = QuestionAttempt.objects.filter(session=session).count()
         correct_answers = QuestionAttempt.objects.filter(session=session, is_correct=True).count()
-        accuracy = correct_answers / max(total_questions, 1)
+        session_accuracy_after = correct_answers / max(total_questions, 1)
         
-        # Determine adaptation message
+        # Determine adaptation recommendation
+        mastery_change = new_mastery - bkt_mastery_before
         if is_correct and new_mastery > 0.7:
             adaptation_message = "🎉 Great job! Questions will get harder to challenge you more."
             difficulty_change = "Questions getting HARDER"
+            next_difficulty = "harder"
         elif not is_correct and new_mastery < 0.4:
             adaptation_message = "💪 Let's try easier questions to build your confidence."
             difficulty_change = "Questions getting EASIER"
+            next_difficulty = "easier"
         else:
             adaptation_message = "👍 Good progress! Questions will stay at similar difficulty."
             difficulty_change = "Difficulty staying SIMILAR"
+            next_difficulty = "same"
+        
+        # Create comprehensive adaptive submission record for analysis (optional - won't fail if table doesn't exist)
+        try:
+            adaptive_submission = AdaptiveSubmission.objects.create(
+                student=session.student,
+                session=session,
+                subject=session.subject,
+                question=question_for_attempt,
+                
+                # Question context
+                question_type=question_for_attempt.question_type,
+                chapter=getattr(question_for_attempt, 'chapter', 'General'),
+                subtopic=getattr(question_for_attempt, 'tags', '').split(',')[0] if getattr(question_for_attempt, 'tags', '') else 'General',
+                difficulty_level=question_for_attempt.difficulty_level,
+                
+                # Student response
+                selected_answer=selected_answer,
+                correct_answer=correct_answer,
+                is_correct=is_correct,
+                
+                # Timing and position
+                time_spent_seconds=time_spent,
+                question_number_in_session=attempt.question_number_in_session,
+                
+                # Knowledge state before and after
+                bkt_mastery_before=bkt_mastery_before,
+                dkt_prediction_before=dkt_prediction_before,
+                bkt_mastery_after=new_mastery,
+                dkt_prediction_after=dkt_prediction_after,
+                
+                # Knowledge tracing data
+                skill_id=skill_id,
+                bkt_params=bkt_params_after,
+                dkt_hidden_state={'prediction': dkt_prediction_after, 'updated': dkt_updated},
+                
+                # Adaptation decisions
+                next_difficulty_recommended=next_difficulty,
+                adaptation_reason=adaptation_message,
+                
+                # Performance context
+                session_accuracy_before=session_accuracy_before,
+                session_accuracy_after=session_accuracy_after,
+                
+                # Metadata
+                submission_source='frontend_api',
+                interaction_data={
+                    'simple_api': True,
+                    'adaptive_submission': True,
+                    'question_id_string': question_id,
+                    'real_question': question_id.startswith("real_"),
+                    'bkt_updated': bkt_updated,
+                    'dkt_updated': dkt_updated,
+                    'mastery_improvement': mastery_change
+                },
+                
+                # Analytics flags
+                is_first_attempt=attempt.question_number_in_session == 1,
+                is_mastery_achieved=new_mastery >= 0.8,
+                contributed_to_mastery=mastery_change > 0.1
+            )
+            
+            logger.info(f"✅ Created adaptive submission analytics record: {adaptive_submission.id}")
+            
+        except Exception as e:
+            logger.warning(f"⚠️  AdaptiveSubmission analytics not available (table may not exist): {e}")
+            # Continue without failing the submission - basic QuestionAttempt is still recorded
         
         response = {
             'success': True,
@@ -422,13 +604,13 @@ def submit_simple_answer(request):
                 'bkt_updated': bkt_updated,
                 'dkt_updated': dkt_updated,
                 'new_mastery_level': new_mastery,
-                'dkt_prediction': dkt_prediction,
+                'dkt_prediction': dkt_prediction_after,
                 'mastery_display': f"{new_mastery:.1%}"
             },
             'session_progress': {
                 'total_questions': total_questions,
                 'correct_answers': correct_answers,
-                'accuracy': f"{accuracy:.1%}",
+                'accuracy': f"{session_accuracy_after:.1%}",
                 'questions_remaining': max(0, session.total_questions_planned - total_questions)
             },
             'adaptive_feedback': {
@@ -524,6 +706,240 @@ def get_session_progress(request, session_id):
 
 @csrf_exempt
 @require_http_methods(["GET"])
+def get_student_analytics(request, student_id, subject_code=None):
+    """
+    GET ANALYTICS - Comprehensive student analytics endpoint
+    
+    Frontend can call this to get detailed learning analytics:
+    GET /student-analytics/<student_id>/
+    GET /student-analytics/<student_id>/<subject_code>/
+    """
+    try:
+        student = get_object_or_404(User, id=student_id)
+        
+        # Get subject if specified
+        subject = None
+        if subject_code:
+            from assessment.improved_models import Subject
+            subject = Subject.objects.filter(code=subject_code).first()
+        
+        # Get performance analysis
+        performance = AdaptiveSubmissionAnalyzer.analyze_student_performance(
+            student=student, 
+            subject=subject, 
+            days=30
+        )
+        
+        if not performance:
+            return JsonResponse({
+                'success': False,
+                'message': 'No submission data found for analysis',
+                'student_name': student.get_full_name() or student.username,
+                'subject': subject.name if subject else 'All Subjects'
+            })
+        
+        # Get learning insights
+        insights_data = AdaptiveSubmissionAnalyzer.generate_learning_insights(
+            student=student, 
+            subject=subject
+        )
+        
+        # Get recent submissions for detailed view
+        recent_submissions = AdaptiveSubmission.objects.filter(
+            student=student
+        )
+        if subject:
+            recent_submissions = recent_submissions.filter(subject=subject)
+        
+        recent_submissions = recent_submissions.order_by('-created_at')[:10]
+        
+        submission_details = []
+        for submission in recent_submissions:
+            submission_details.append({
+                'id': str(submission.id),
+                'created_at': submission.created_at.isoformat(),
+                'subject': submission.subject.name,
+                'chapter': submission.chapter,
+                'difficulty': submission.difficulty_level,
+                'is_correct': submission.is_correct,
+                'time_spent': submission.time_spent_seconds,
+                'mastery_before': submission.bkt_mastery_before,
+                'mastery_after': submission.bkt_mastery_after,
+                'mastery_improvement': submission.mastery_improvement,
+                'adaptation_reason': submission.adaptation_reason
+            })
+        
+        # Compile comprehensive analytics
+        analytics_response = {
+            'success': True,
+            'student_name': student.get_full_name() or student.username,
+            'subject': subject.name if subject else 'All Subjects',
+            'analysis_period': '30 days',
+            
+            # Performance metrics
+            'performance_summary': {
+                'total_submissions': performance['total_submissions'],
+                'overall_accuracy': f"{performance['accuracy']:.1%}",
+                'mastery_growth': f"{performance['mastery_growth']:+.1%}",
+                'average_time_per_question': f"{performance['average_time_per_question']:.1f}s",
+                'starting_mastery': f"{performance['starting_mastery']:.1%}",
+                'current_mastery': f"{performance['ending_mastery']:.1%}"
+            },
+            
+            # Learning insights and recommendations
+            'learning_insights': insights_data['insights'],
+            'recommendations': insights_data['recommendations'],
+            
+            # Difficulty progression
+            'difficulty_distribution': performance['difficulty_distribution'],
+            
+            # Recent activity
+            'recent_submissions': submission_details,
+            
+            # Trends and patterns
+            'learning_trends': {
+                'mastery_trajectory': 'improving' if performance['mastery_growth'] > 0 else 'stable',
+                'accuracy_trend': 'high' if performance['accuracy'] > 0.7 else 'moderate' if performance['accuracy'] > 0.5 else 'developing',
+                'engagement_level': 'high' if performance['total_submissions'] > 20 else 'moderate' if performance['total_submissions'] > 10 else 'low'
+            },
+            
+            'message': f"📊 Analytics for {student.get_full_name() or student.username} - {performance['total_submissions']} submissions analyzed"
+        }
+        
+        return JsonResponse(analytics_response)
+        
+    except Exception as e:
+        logger.error(f"Get analytics error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'message': 'Failed to get student analytics'
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_submission_reports(request):
+    """
+    GET SUBMISSION REPORTS - Aggregate analytics endpoint
+    
+    Frontend can call this to get system-wide analytics:
+    GET /submission-reports/?days=7&subject=quantitative_aptitude
+    """
+    try:
+        # Get query parameters
+        days = int(request.GET.get('days', 7))
+        subject_code = request.GET.get('subject')
+        
+        from django.utils import timezone
+        from datetime import timedelta
+        
+        end_date = timezone.now()
+        start_date = end_date - timedelta(days=days)
+        
+        # Base queryset
+        submissions = AdaptiveSubmission.objects.filter(
+            created_at__gte=start_date,
+            created_at__lte=end_date
+        )
+        
+        # Filter by subject if specified
+        if subject_code:
+            from assessment.improved_models import Subject
+            subject = Subject.objects.filter(code=subject_code).first()
+            if subject:
+                submissions = submissions.filter(subject=subject)
+        
+        # Aggregate statistics
+        total_submissions = submissions.count()
+        if total_submissions == 0:
+            return JsonResponse({
+                'success': True,
+                'message': 'No submissions found for the specified period',
+                'period_days': days,
+                'total_submissions': 0
+            })
+        
+        # Calculate metrics
+        correct_submissions = submissions.filter(is_correct=True).count()
+        overall_accuracy = correct_submissions / total_submissions
+        
+        # Subject breakdown
+        subject_stats = submissions.values('subject__name').annotate(
+            count=models.Count('id'),
+            accuracy=models.Avg('is_correct'),
+            avg_mastery_growth=models.Avg('bkt_mastery_after') - models.Avg('bkt_mastery_before')
+        ).order_by('-count')
+        
+        # Difficulty distribution
+        difficulty_stats = submissions.values('difficulty_level').annotate(
+            count=models.Count('id'),
+            accuracy=models.Avg('is_correct')
+        ).order_by('difficulty_level')
+        
+        # Top performing students
+        student_stats = submissions.values(
+            'student__username', 
+            'student__first_name', 
+            'student__last_name'
+        ).annotate(
+            submissions_count=models.Count('id'),
+            accuracy=models.Avg('is_correct'),
+            mastery_growth=models.Max('bkt_mastery_after') - models.Min('bkt_mastery_before')
+        ).order_by('-mastery_growth')[:10]
+        
+        reports_response = {
+            'success': True,
+            'period_days': days,
+            'subject_filter': subject_code or 'All Subjects',
+            'report_generated_at': timezone.now().isoformat(),
+            
+            # Overall metrics
+            'system_overview': {
+                'total_submissions': total_submissions,
+                'overall_accuracy': f"{overall_accuracy:.1%}",
+                'unique_students': submissions.values('student').distinct().count(),
+                'unique_sessions': submissions.values('session').distinct().count()
+            },
+            
+            # Subject performance
+            'subject_breakdown': list(subject_stats),
+            
+            # Difficulty analysis
+            'difficulty_analysis': list(difficulty_stats),
+            
+            # Student performance
+            'top_students': list(student_stats),
+            
+            # System health indicators
+            'system_health': {
+                'average_response_time': submissions.aggregate(
+                    avg_time=models.Avg('time_spent_seconds')
+                )['avg_time'] or 0,
+                'mastery_improvement_rate': submissions.aggregate(
+                    avg_improvement=models.Avg(
+                        models.F('bkt_mastery_after') - models.F('bkt_mastery_before')
+                    )
+                )['avg_improvement'] or 0,
+                'adaptation_effectiveness': submissions.filter(
+                    contributed_to_mastery=True
+                ).count() / total_submissions
+            },
+            
+            'message': f"📈 System report: {total_submissions} submissions from {submissions.values('student').distinct().count()} students over {days} days"
+        }
+        
+        return JsonResponse(reports_response)
+        
+    except Exception as e:
+        logger.error(f"Get reports error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'message': 'Failed to generate submission reports'
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
 def api_health(request):
     """
     HEALTH CHECK - Direct frontend click endpoint
@@ -546,6 +962,8 @@ def api_health(request):
             'GET /get-question - Get adaptive question',
             'POST /submit-answer - Submit answer and see adaptation',
             'GET /session-progress - View learning progress',
+            'GET /student-analytics - Detailed student analytics',
+            'GET /submission-reports - System-wide analytics reports',
             'GET /health - Check API status'
         ],
         'ready_for_frontend': True

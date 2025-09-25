@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports Dashboard - Test</title>
+    <script src="https://unpkg.com/recharts@2.8.0/umd/Recharts.js"></script>
+    <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; margin: 0; padding: 20px; background-color: #f5f5f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .card { background: white; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); margin: 20px 0; padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+        .stats-card { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; text-align: center; }
+        .loading { display: flex; justify-content: center; align-items: center; height: 200px; }
+        .error { color: red; padding: 20px; text-align: center; }
+        .test-section { margin: 20px 0; padding: 20px; border: 2px dashed #ddd; }
+        .api-result { background: #f8f9fa; padding: 15px; border-radius: 5px; margin: 10px 0; font-family: monospace; white-space: pre-wrap; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Reports Dashboard - API Test</h1>
+        
+        <div class="test-section">
+            <h2>🧪 API Test Results</h2>
+            <div id="api-tests"></div>
+        </div>
+
+        <div id="dashboard-root"></div>
+    </div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+        const { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } = Recharts;
+
+        const API_BASE = 'http://localhost:8000/api/reports';
+
+        // Test API endpoints
+        const TestResults = () => {
+            const [testResults, setTestResults] = useState({});
+            const [loading, setLoading] = useState(true);
+
+            useEffect(() => {
+                runAPITests();
+            }, []);
+
+            const runAPITests = async () => {
+                const tests = [
+                    { name: 'Dashboard Stats', url: `${API_BASE}/dashboard` },
+                    { name: 'Session Reports', url: `${API_BASE}/sessions?days=30` },
+                    { name: 'Student Performance', url: `${API_BASE}/students?days=30` },
+                    { name: 'Question Analytics', url: `${API_BASE}/questions` }
+                ];
+
+                const results = {};
+
+                for (const test of tests) {
+                    try {
+                        const response = await fetch(test.url);
+                        const data = await response.json();
+                        results[test.name] = {
+                            status: response.status,
+                            success: response.ok,
+                            data: data,
+                            count: Array.isArray(data) ? data.length : Object.keys(data || {}).length
+                        };
+                    } catch (error) {
+                        results[test.name] = {
+                            status: 'Error',
+                            success: false,
+                            error: error.message,
+                            count: 0
+                        };
+                    }
+                }
+
+                setTestResults(results);
+                setLoading(false);
+            };
+
+            if (loading) {
+                return <div className="loading">🔄 Testing API endpoints...</div>;
+            }
+
+            return (
+                <div>
+                    {Object.entries(testResults).map(([testName, result]) => (
+                        <div key={testName} className="api-result">
+                            <h3>{result.success ? '✅' : '❌'} {testName}</h3>
+                            <p><strong>Status:</strong> {result.status}</p>
+                            <p><strong>Records:</strong> {result.count}</p>
+                            {result.error && <p><strong>Error:</strong> {result.error}</p>}
+                            {result.success && (
+                                <details>
+                                    <summary>View Data</summary>
+                                    <pre>{JSON.stringify(result.data, null, 2).substring(0, 500)}...</pre>
+                                </details>
+                            )}
+                        </div>
+                    ))}
+                </div>
+            );
+        };
+
+        // Simple Dashboard Component
+        const SimpleDashboard = () => {
+            const [data, setData] = useState(null);
+            const [loading, setLoading] = useState(true);
+            const [error, setError] = useState(null);
+
+            useEffect(() => {
+                fetchData();
+            }, []);
+
+            const fetchData = async () => {
+                try {
+                    const response = await fetch(`${API_BASE}/dashboard`);
+                    if (!response.ok) throw new Error('Failed to fetch dashboard data');
+                    const dashboardData = await response.json();
+                    setData(dashboardData);
+                } catch (err) {
+                    setError(err.message);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            if (loading) return <div className="loading">🔄 Loading dashboard...</div>;
+            if (error) return <div className="error">❌ Error: {error}</div>;
+            if (!data) return <div className="error">No data available</div>;
+
+            const dailyTrendData = data.performance_trends.daily_accuracy.map((accuracy, index) => ({
+                day: `Day ${index + 1}`,
+                accuracy: accuracy,
+            }));
+
+            return (
+                <div>
+                    <h2>📈 Dashboard Overview</h2>
+                    
+                    <div className="grid">
+                        <div className="card stats-card">
+                            <h3>👥 Total Students</h3>
+                            <p style={{fontSize: '2em', margin: '10px 0'}}>{data.total_students}</p>
+                        </div>
+                        <div className="card stats-card">
+                            <h3>📝 Total Sessions</h3>
+                            <p style={{fontSize: '2em', margin: '10px 0'}}>{data.total_sessions}</p>
+                        </div>
+                        <div className="card stats-card">
+                            <h3>✍️ Total Submissions</h3>
+                            <p style={{fontSize: '2em', margin: '10px 0'}}>{data.total_submissions}</p>
+                        </div>
+                        <div className="card stats-card">
+                            <h3>🎯 Average Accuracy</h3>
+                            <p style={{fontSize: '2em', margin: '10px 0'}}>{data.average_session_accuracy}%</p>
+                        </div>
+                    </div>
+
+                    <div className="grid">
+                        <div className="card">
+                            <h3>📈 Daily Performance Trend</h3>
+                            <ResponsiveContainer width="100%" height={300}>
+                                <LineChart data={dailyTrendData}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="day" />
+                                    <YAxis />
+                                    <Tooltip formatter={(value) => [`${value}%`, 'Accuracy']} />
+                                    <Line type="monotone" dataKey="accuracy" stroke="#8884d8" strokeWidth={2} />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </div>
+
+                        <div className="card">
+                            <h3>🏆 Most Popular Subject</h3>
+                            <div style={{textAlign: 'center', padding: '40px'}}>
+                                <div style={{fontSize: '3em'}}>📚</div>
+                                <h4>{data.most_popular_subject}</h4>
+                                <p>Students are focusing on this subject the most</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="card">
+                        <h3>🕒 Recent Activity</h3>
+                        <div style={{maxHeight: '300px', overflowY: 'auto'}}>
+                            {data.recent_activity.map((activity, index) => (
+                                <div key={index} style={{
+                                    display: 'flex', 
+                                    justifyContent: 'space-between', 
+                                    alignItems: 'center',
+                                    padding: '10px', 
+                                    margin: '5px 0',
+                                    backgroundColor: '#f8f9fa',
+                                    borderRadius: '5px'
+                                }}>
+                                    <div>
+                                        <strong>{activity.student}</strong>
+                                        <div style={{fontSize: '0.9em', color: '#666'}}>{activity.subject}</div>
+                                    </div>
+                                    <div style={{textAlign: 'right'}}>
+                                        <span style={{
+                                            padding: '4px 8px',
+                                            borderRadius: '4px',
+                                            backgroundColor: activity.correct ? '#d4edda' : '#f8d7da',
+                                            color: activity.correct ? '#155724' : '#721c24'
+                                        }}>
+                                            {activity.correct ? '✓ Correct' : '✗ Incorrect'}
+                                        </span>
+                                        <div style={{fontSize: '0.8em', color: '#666', marginTop: '4px'}}>
+                                            Mastery: {(activity.mastery * 100).toFixed(1)}%
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // Main App
+        const App = () => {
+            const [activeTab, setActiveTab] = useState('test');
+
+            return (
+                <div>
+                    <div style={{marginBottom: '20px'}}>
+                        <button 
+                            onClick={() => setActiveTab('test')}
+                            style={{
+                                padding: '10px 20px', 
+                                margin: '0 10px',
+                                backgroundColor: activeTab === 'test' ? '#007bff' : '#f8f9fa',
+                                color: activeTab === 'test' ? 'white' : 'black',
+                                border: '1px solid #ddd',
+                                borderRadius: '5px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            🧪 API Tests
+                        </button>
+                        <button 
+                            onClick={() => setActiveTab('dashboard')}
+                            style={{
+                                padding: '10px 20px', 
+                                margin: '0 10px',
+                                backgroundColor: activeTab === 'dashboard' ? '#007bff' : '#f8f9fa',
+                                color: activeTab === 'dashboard' ? 'white' : 'black',
+                                border: '1px solid #ddd',
+                                borderRadius: '5px',
+                                cursor: 'pointer'
+                            }}
+                        >
+                            📊 Dashboard
+                        </button>
+                    </div>
+
+                    {activeTab === 'test' && <TestResults />}
+                    {activeTab === 'dashboard' && <SimpleDashboard />}
+                </div>
+            );
+        };
+
+        // Render the app
+        ReactDOM.render(<App />, document.getElementById('dashboard-root'));
+
+        // Also render test results in the dedicated section
+        ReactDOM.render(<TestResults />, document.getElementById('api-tests'));
+    </script>
+</body>
+</html>
