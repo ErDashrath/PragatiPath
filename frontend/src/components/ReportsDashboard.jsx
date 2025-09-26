@@ -244,24 +244,33 @@ const OverviewTab = ({ data }) => {
 
   return (
     <div className="space-y-6">
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
+      {/* Stats Cards - Now Much Taller and More Prominent */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
         {statsCards.map((stat, index) => (
-          <div key={index} className="bg-white rounded-2xl shadow-lg border border-gray-100 hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 min-h-[200px]">
-            <div className="p-8 h-full flex flex-col justify-between">
-              <div className="flex items-center justify-between mb-6">
-                <div className={`text-5xl p-4 rounded-xl bg-gradient-to-r ${
-                  stat.color === 'blue' ? 'from-blue-500 to-blue-600' :
-                  stat.color === 'green' ? 'from-green-500 to-green-600' :
-                  stat.color === 'purple' ? 'from-purple-500 to-purple-600' :
-                  'from-orange-500 to-orange-600'
+          <div key={index} className="bg-gradient-to-br from-white via-gray-50 to-gray-100 rounded-3xl shadow-xl border-2 border-gray-200 hover:shadow-2xl hover:border-blue-300 transition-all duration-500 transform hover:-translate-y-2 min-h-[280px]">
+            <div className="p-10 h-full flex flex-col">
+              {/* Large Icon at Top */}
+              <div className="text-center mb-8">
+                <div className={`inline-flex items-center justify-center w-20 h-20 rounded-2xl bg-gradient-to-r shadow-lg ${
+                  stat.color === 'blue' ? 'from-blue-500 to-blue-700' :
+                  stat.color === 'green' ? 'from-green-500 to-green-700' :
+                  stat.color === 'purple' ? 'from-purple-500 to-purple-700' :
+                  'from-orange-500 to-orange-700'
                 }`}>
-                  <span className="text-white">{stat.icon}</span>
+                  <span className="text-white text-4xl">{stat.icon}</span>
                 </div>
               </div>
-              <div className="space-y-3 flex-1 flex flex-col justify-end">
-                <p className="text-sm font-medium text-gray-500 uppercase tracking-wide">{stat.title}</p>
-                <p className="text-4xl font-bold text-gray-900">{stat.value}</p>
+              
+              {/* Content at Bottom */}
+              <div className="flex-1 flex flex-col justify-end text-center space-y-4">
+                <p className="text-sm font-bold text-gray-600 uppercase tracking-widest">{stat.title}</p>
+                <p className="text-5xl font-black text-gray-900">{stat.value}</p>
+                <div className={`h-2 rounded-full bg-gradient-to-r ${
+                  stat.color === 'blue' ? 'from-blue-400 to-blue-600' :
+                  stat.color === 'green' ? 'from-green-400 to-green-600' :
+                  stat.color === 'purple' ? 'from-purple-400 to-purple-600' :
+                  'from-orange-400 to-orange-600'
+                }`}></div>
               </div>
             </div>
           </div>
@@ -269,77 +278,82 @@ const OverviewTab = ({ data }) => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Daily Performance Trend */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 hover:shadow-xl transition-shadow duration-300 min-h-[500px]">
-          <div className="flex items-center mb-8">
-            <div className="p-4 bg-gradient-to-r from-blue-500 to-blue-600 rounded-xl mr-4">
-              <span className="text-white text-2xl">📈</span>
+        {/* Daily Performance Trend - MUCH TALLER AND MORE VISUAL */}
+        <div className="bg-gradient-to-br from-white via-blue-50 to-blue-100 rounded-3xl shadow-2xl border-4 border-blue-300 p-12 hover:shadow-3xl transition-all duration-500 transform hover:-translate-y-3 min-h-[700px]">
+          <div className="flex items-center mb-12">
+            <div className="p-6 bg-gradient-to-r from-blue-600 to-indigo-700 rounded-2xl mr-6 shadow-xl">
+              <span className="text-white text-5xl">📈</span>
             </div>
             <div>
-              <h3 className="text-xl font-semibold text-gray-800">Daily Performance Trend</h3>
-              <p className="text-sm text-gray-600 mt-1">Student accuracy over time</p>
+              <h3 className="text-3xl font-black text-gray-900">Daily Performance Trend</h3>
+              <div className="h-1 w-40 bg-gradient-to-r from-blue-500 to-indigo-600 rounded-full mt-3"></div>
+              <p className="text-lg text-gray-600 mt-4 font-semibold">Student accuracy progression over time</p>
             </div>
           </div>
-          <div className="h-80">
+          <div className="h-[450px] bg-white rounded-2xl shadow-inner border-4 border-blue-100 p-6">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={dailyTrendData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} />
+                <CartesianGrid strokeDasharray="5 5" stroke="#dbeafe" strokeWidth={2} />
+                <XAxis dataKey="day" tick={{ fontSize: 14, fontWeight: 'bold', fill: '#1e40af' }} />
+                <YAxis tick={{ fontSize: 14, fontWeight: 'bold', fill: '#1e40af' }} />
                 <Tooltip 
                   formatter={(value) => [`${value}%`, 'Accuracy']}
                   contentStyle={{
-                    backgroundColor: 'white',
-                    border: '1px solid #e5e7eb',
-                    borderRadius: '12px',
-                    boxShadow: '0 10px 15px -3px rgba(0, 0, 0, 0.1)'
+                    backgroundColor: '#1e40af',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '16px',
+                    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.3)',
+                    fontSize: '16px',
+                    fontWeight: 'bold'
                   }}
                 />
                 <Line 
                   type="monotone" 
                   dataKey="accuracy" 
-                  stroke="#3B82F6" 
-                  strokeWidth={3}
-                  dot={{ fill: '#3B82F6', strokeWidth: 2, r: 6 }}
-                  activeDot={{ r: 8, fill: '#1E40AF' }}
+                  stroke="#1d4ed8" 
+                  strokeWidth={6}
+                  dot={{ r: 8, fill: '#1e40af', strokeWidth: 3, stroke: '#ffffff' }}
+                  activeDot={{ r: 12, fill: '#1d4ed8', strokeWidth: 4, stroke: '#ffffff' }}
                 />
               </LineChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        {/* Recent Activity */}
-        <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-8 hover:shadow-xl transition-shadow duration-300 min-h-[500px]">
-          <div className="flex items-center mb-8">
-            <div className="p-4 bg-gradient-to-r from-green-500 to-green-600 rounded-xl mr-4">
-              <span className="text-white text-2xl">🕒</span>
+        {/* Recent Activity - MUCH TALLER AND MORE DRAMATIC */}
+        <div className="bg-gradient-to-br from-white via-green-50 to-green-100 rounded-3xl shadow-2xl border-4 border-green-300 p-12 hover:shadow-3xl transition-all duration-500 transform hover:-translate-y-3 min-h-[700px]">
+          <div className="flex items-center mb-12">
+            <div className="p-6 bg-gradient-to-r from-green-600 to-emerald-700 rounded-2xl mr-6 shadow-xl">
+              <span className="text-white text-5xl">🕒</span>
             </div>
             <div>
-              <h3 className="text-xl font-semibold text-gray-800">Recent Activity</h3>
-              <p className="text-sm text-gray-600 mt-1">Latest student interactions</p>
+              <h3 className="text-3xl font-black text-gray-900">Recent Student Activity</h3>
+              <div className="h-1 w-40 bg-gradient-to-r from-green-500 to-emerald-600 rounded-full mt-3"></div>
+              <p className="text-lg text-gray-600 mt-4 font-semibold">Latest learning interactions and engagement patterns</p>
             </div>
           </div>
-          <div className="space-y-6 max-h-80 overflow-y-auto custom-scrollbar pr-2">
+          <div className="bg-white rounded-2xl shadow-inner border-4 border-green-100 p-6 space-y-6 max-h-[450px] overflow-y-auto custom-scrollbar">
             {(data.recent_activity || []).map((activity, index) => (
-              <div key={index} className="flex items-center justify-between p-6 bg-gradient-to-r from-gray-50 to-gray-100 rounded-xl hover:from-blue-50 hover:to-blue-100 transition-all duration-200 shadow-sm">
-                <div className="flex items-center space-x-4">
-                  <div className={`w-12 h-12 rounded-full flex items-center justify-center text-lg ${
-                    activity.correct ? 'bg-green-100 text-green-600' : 'bg-red-100 text-red-600'
+              <div key={index} className="flex items-center justify-between p-6 bg-gradient-to-r from-gray-50 to-gray-100 rounded-2xl border-2 border-gray-200 hover:shadow-xl transition-all duration-300 hover:scale-[1.02]">
+                <div className="flex items-center space-x-6">
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center text-2xl font-black shadow-lg ${
+                    activity.correct ? 'bg-gradient-to-r from-green-400 to-green-600 text-white' : 'bg-gradient-to-r from-red-400 to-red-600 text-white'
                   }`}>
                     {activity.correct ? '✓' : '✗'}
                   </div>
                   <div>
-                    <p className="font-semibold text-gray-900 text-lg">{activity.student}</p>
-                    <p className="text-sm text-gray-600 mt-1">{activity.subject}</p>
+                    <p className="font-black text-gray-900 text-2xl">{activity.student}</p>
+                    <p className="text-lg text-gray-600 mt-2 font-bold">{activity.subject}</p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <span className={`inline-flex px-4 py-2 text-sm font-medium rounded-full ${
-                    activity.correct ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'
+                  <span className={`inline-flex px-6 py-3 text-lg font-black rounded-2xl shadow-lg ${
+                    activity.correct ? 'bg-gradient-to-r from-green-500 to-green-700 text-white' : 'bg-gradient-to-r from-red-500 to-red-700 text-white'
                   }`}>
-                    {activity.correct ? 'Correct' : 'Incorrect'}
+                    {activity.correct ? 'CORRECT' : 'INCORRECT'}
                   </span>
-                  <p className="text-xs text-gray-500 mt-2">Mastery: {(activity.mastery * 100).toFixed(1)}%</p>
+                  <p className="text-sm text-gray-600 mt-3 font-bold">Mastery: {(activity.mastery * 100).toFixed(1)}%</p>
                 </div>
               </div>
             ))}
@@ -347,19 +361,20 @@ const OverviewTab = ({ data }) => {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-10 hover:shadow-xl transition-shadow duration-300 min-h-[350px]">
+      <div className="bg-gradient-to-br from-white via-purple-50 to-purple-100 rounded-3xl shadow-2xl border-4 border-purple-300 p-12 hover:shadow-3xl transition-all duration-500 transform hover:-translate-y-3 min-h-[500px]">
         <div className="text-center h-full flex flex-col justify-between">
           <div>
-            <div className="inline-flex items-center justify-center w-24 h-24 bg-gradient-to-r from-purple-500 to-purple-600 rounded-2xl mb-8">
-              <div className="text-5xl">📚</div>
+            <div className="inline-flex items-center justify-center w-32 h-32 bg-gradient-to-r from-purple-600 to-pink-700 rounded-3xl mb-10 shadow-2xl">
+              <div className="text-7xl">📚</div>
             </div>
           </div>
-          <div className="space-y-5 flex-1 flex flex-col justify-center">
-            <h3 className="text-2xl font-semibold text-gray-800">Most Popular Subject</h3>
-            <p className="text-3xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
+          <div className="space-y-8 flex-1 flex flex-col justify-center">
+            <h3 className="text-4xl font-black text-gray-900">Most Popular Subject</h3>
+            <div className="h-2 w-48 bg-gradient-to-r from-purple-500 to-pink-600 rounded-full mx-auto"></div>
+            <p className="text-6xl font-black bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
               {data.most_popular_subject}
             </p>
-            <p className="text-gray-600 leading-relaxed max-w-md mx-auto text-lg">
+            <p className="text-gray-600 leading-relaxed max-w-md mx-auto text-xl font-bold">
               Students are focusing on this subject the most this month
             </p>
           </div>
