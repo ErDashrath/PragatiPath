@@ -68,6 +68,11 @@ def start_simple_session(request):
         data = json.loads(request.body)
         student_name = data.get('student_name', 'Test Student')
         subject = data.get('subject', 'mathematics')
+        question_count = data.get('question_count', 10)  # Default to 10 if not provided
+        
+        # Validate question count
+        if not isinstance(question_count, int) or question_count < 1 or question_count > 50:
+            question_count = 10  # Default fallback
         
         # Create or get student
         username = f"student_{student_name.replace(' ', '_').lower()}"
@@ -128,13 +133,14 @@ def start_simple_session(request):
             student=user,
             subject=subject_obj,
             session_name=f"Simple {subject_obj.name} Session",
-            total_questions_planned=5,
+            total_questions_planned=question_count,  # Use the provided question count
             session_config={
                 'subject': subject,
                 'subject_code': subject_code,
                 'subject_name': subject_obj.name,
                 'frontend_session': True,
-                'simple_api': True
+                'simple_api': True,
+                'question_count': question_count  # Store in config for reference
             }
         )
         
@@ -178,6 +184,19 @@ def get_simple_question(request, session_id):
         
         # Count current questions
         question_count = QuestionAttempt.objects.filter(session=session).count() + 1
+        
+        # Check if session has reached question limit
+        if question_count > session.total_questions_planned:
+            return JsonResponse({
+                'success': False,
+                'session_complete': True,
+                'message': f'Session complete! You have completed all {session.total_questions_planned} questions.',
+                'next_action': 'Session finished! 🎉',
+                'session_stats': {
+                    'questions_completed': session.total_questions_planned,
+                    'questions_planned': session.total_questions_planned
+                }
+            }, status=200)
         
         # Get current knowledge state for adaptive difficulty using orchestration
         skill_id = f"{subject}_skill_{question_count}"
@@ -1099,6 +1118,7 @@ def api_health(request):
             'POST /start-session - Start a new learning session',
             'GET /get-question - Get adaptive question',
             'POST /submit-answer - Submit answer and see adaptation',
+            'POST /complete-session - Complete and save session to history',
             'GET /session-progress - View learning progress',
             'GET /student-analytics - Detailed student analytics',
             'GET /submission-reports - System-wide analytics reports',
@@ -1106,6 +1126,201 @@ def api_health(request):
         ],
         'ready_for_frontend': True
     })
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def complete_simple_session(request):
+    """
+    COMPLETE SESSION - Save session to history
+    
+    Frontend calls this when adaptive learning session completes:
+    POST /complete-session
+    {
+        "session_id": "uuid-session-id",
+        "total_questions": 15,
+        "correct_answers": 6,
+        "session_duration_seconds": 600,
+        "final_mastery_level": 0.388,
+        "student_username": "actual_username"  // Add this parameter
+    }
+    """
+    try:
+        data = json.loads(request.body)
+        session_id = data.get('session_id')
+        total_questions = data.get('total_questions', 0)
+        correct_answers = data.get('correct_answers', 0)
+        session_duration = data.get('session_duration_seconds', 0)
+        final_mastery = data.get('final_mastery_level', 0.0)
+        student_username = data.get('student_username')  # New parameter
+        
+        if not session_id:
+            return JsonResponse({
+                'success': False,
+                'message': 'Session ID is required'
+            }, status=400)
+        
+        if not student_username:
+            return JsonResponse({
+                'success': False,
+                'message': 'Student username is required'
+            }, status=400)
+        
+        # Find the actual authenticated user by username
+        # Try both the provided username and the student_prefixed version
+        user = None
+        try:
+            user = User.objects.get(username=student_username)
+        except User.DoesNotExist:
+            # Try with student_ prefix (matching the start session logic)
+            prefixed_username = f"student_{student_username.replace(' ', '_').lower()}"
+            try:
+                user = User.objects.get(username=prefixed_username)
+            except User.DoesNotExist:
+                return JsonResponse({
+                    'success': False,
+                    'message': f'User "{student_username}" not found (tried both "{student_username}" and "{prefixed_username}")'
+                }, status=404)
+        
+        # Get session subject from cache or default to quantitative aptitude
+        # Note: Since Redis is not available, we'll use the default subject
+        # In a production environment, we'd retrieve this from the session cache
+        subject_code = 'quantitative_aptitude'  # Default subject
+        
+        # Get or create subject
+        from assessment.improved_models import Subject, StudentSession
+        
+        subject, _ = Subject.objects.get_or_create(
+            code=subject_code,
+            defaults={'name': subject_code.replace('_', ' ').title()}
+        )
+        
+        # Create the completed session record for history
+        # Calculate scores
+        accuracy_percentage = (correct_answers / total_questions * 100) if total_questions > 0 else 0
+        
+        # Create the StudentSession record for history using the authenticated user
+        completed_session = StudentSession.objects.create(
+            student=user,  # Use the actual authenticated user
+            subject=subject,
+            session_type='PRACTICE',
+            session_name=f"Adaptive Learning - {subject.name}",
+            status='COMPLETED',
+            total_questions_planned=total_questions,
+            questions_attempted=total_questions,
+            questions_correct=correct_answers,
+            questions_incorrect=total_questions - correct_answers,
+            percentage_score=accuracy_percentage,
+            session_start_time=timezone.now() - timezone.timedelta(seconds=session_duration),
+            session_end_time=timezone.now(),
+            session_duration_seconds=session_duration,
+            session_config={
+                'session_id': session_id,
+                'final_mastery_level': final_mastery,
+                'created_by': 'adaptive_learning_interface'
+            }
+        )
+        
+        # Copy QuestionAttempt records from the temporary session to the completed session
+        actual_correct_answers = 0
+        actual_total_questions = 0
+        
+        try:
+            from assessment.improved_models import QuestionAttempt
+            from uuid import UUID
+            
+            # Find the temporary session
+            temp_session = StudentSession.objects.filter(id=UUID(session_id)).first()
+            if temp_session:
+                # Copy all question attempts to the new completed session
+                temp_attempts = QuestionAttempt.objects.filter(session=temp_session)
+                actual_total_questions = temp_attempts.count()
+                
+                for attempt in temp_attempts:
+                    if attempt.is_correct:
+                        actual_correct_answers += 1
+                        
+                    QuestionAttempt.objects.create(
+                        session=completed_session,
+                        question=attempt.question,
+                        student=user,
+                        question_number_in_session=attempt.question_number_in_session,
+                        student_answer=attempt.student_answer,
+                        correct_answer=attempt.correct_answer,
+                        is_correct=attempt.is_correct,
+                        time_spent_seconds=attempt.time_spent_seconds,
+                        points_earned=attempt.points_earned,
+                        question_points=attempt.question_points,
+                        difficulty_when_presented=attempt.difficulty_when_presented,
+                        confidence_level=attempt.confidence_level,
+                        interaction_data=attempt.interaction_data,
+                        created_at=attempt.created_at,
+                        updated_at=timezone.now()
+                    )
+                
+                # Update the completed session with actual statistics
+                actual_accuracy = (actual_correct_answers / actual_total_questions * 100) if actual_total_questions > 0 else 0
+                
+                completed_session.questions_attempted = actual_total_questions
+                completed_session.questions_correct = actual_correct_answers
+                completed_session.questions_incorrect = actual_total_questions - actual_correct_answers
+                completed_session.percentage_score = actual_accuracy
+                completed_session.total_questions_planned = actual_total_questions
+                
+                # Update grade based on actual performance
+                if actual_accuracy >= 90:
+                    grade = 'A+'
+                elif actual_accuracy >= 80:
+                    grade = 'A'
+                elif actual_accuracy >= 70:
+                    grade = 'B'
+                elif actual_accuracy >= 60:
+                    grade = 'C'
+                elif actual_accuracy >= 50:
+                    grade = 'D'
+                else:
+                    grade = 'F'
+                
+                # Save the updated session
+                completed_session.save()
+                
+                print(f"✅ Copied {actual_total_questions} question attempts ({actual_correct_answers} correct, {actual_accuracy:.1f}%)")
+            else:
+                print(f"⚠️  Temporary session {session_id} not found, no question attempts copied")
+                
+        except Exception as e:
+            print(f"⚠️  Error copying question attempts: {e}")
+            # Continue anyway - session completion should not fail due to this
+        
+        # Note: Cache cleanup removed since Redis is not available
+        
+        return JsonResponse({
+            'success': True,
+            'message': 'Session completed and saved to history successfully',
+            'session_data': {
+                'session_id': str(completed_session.id),
+                'student_username': user.username,
+                'subject': subject.name,
+                'total_questions': total_questions,
+                'correct_answers': correct_answers,
+                'accuracy_percentage': accuracy_percentage,
+                'duration_seconds': session_duration,
+                'session_type': 'Adaptive Learning'
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Error completing session {session_id}: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'message': f'Error saving session: {str(e)}'
+        }, status=500)
+
+    except Exception as e:
+        logger.error(f"Error in complete_simple_session: {str(e)}")
+        return JsonResponse({
+            'success': False,
+            'message': f'Error saving session: {str(e)}'
+        }, status=500)
 
 # ============================================================================
 # URL Routing Setup (if needed)
@@ -1119,6 +1334,7 @@ def setup_simple_urls():
         path('start-session', start_simple_session, name='start_simple_session'),
         path('get-question/<str:session_id>/', get_simple_question, name='get_simple_question'),
         path('submit-answer', submit_simple_answer, name='submit_simple_answer'),
+        path('complete-session', complete_simple_session, name='complete_simple_session'),
         path('session-progress/<str:session_id>/', get_session_progress, name='get_session_progress'),
         path('health', api_health, name='api_health'),
     ]

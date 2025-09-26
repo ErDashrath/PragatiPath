@@ -12,6 +12,7 @@ import SessionConfig, { type SessionConfig as SessionConfigType } from "./sessio
 import { 
   AdaptiveLearningAPI, 
   AdaptiveLearningUtils,
+  SessionCompleteError,
   AVAILABLE_SUBJECTS,
   type AdaptiveSession,
   type AdaptiveQuestion,
@@ -50,6 +51,44 @@ export default function AdaptiveLearningInterface({
   const [questionsCompleted, setQuestionsCompleted] = useState(0);
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
 
+  // Helper function to save session to backend for history
+  const saveSessionToHistory = async () => {
+    if (!session || !progress || !sessionStartTime || !sessionConfig) return;
+
+    try {
+      const sessionDurationSeconds = Math.floor(
+        (Date.now() - sessionStartTime.getTime()) / 1000
+      );
+
+      // Calculate correct answers from progress if available
+      const correctAnswers = progress.session_stats?.correct_answers || 0;
+      const totalQuestions = questionsCompleted;
+      
+      // Extract mastery level from knowledge state (convert percentage string to number)
+      const masteryString = progress.knowledge_state?.bkt_mastery || '0%';
+      const finalMasteryLevel = parseFloat(masteryString.replace('%', '')) / 100;
+
+      const sessionData = {
+        session_id: session.session_id,
+        total_questions: totalQuestions,
+        correct_answers: correctAnswers,
+        session_duration_seconds: sessionDurationSeconds,
+        final_mastery_level: finalMasteryLevel,
+        student_username: user?.username || 'unknown'  // Add current user's username
+      };
+
+      await AdaptiveLearningAPI.completeSession(sessionData);
+      
+      toast({
+        title: "Session Saved! 📊",
+        description: "Your learning session has been saved to history.",
+      });
+    } catch (error) {
+      console.error('Failed to save session:', error);
+      // Don't show error toast to avoid disrupting completion experience
+    }
+  };
+
   const handleStartSession = (config: SessionConfigType) => {
     setSessionConfig(config);
     setPhase('setup');
@@ -63,6 +102,8 @@ export default function AdaptiveLearningInterface({
     } else if (timeRemaining === 0 && phase === 'learning') {
       // Time's up! Complete the session
       setPhase('completed');
+      // Save session to history
+      saveSessionToHistory();
       toast({
         title: "Time's Up! ⏰",
         description: "Your adaptive learning session has completed.",
@@ -76,7 +117,8 @@ export default function AdaptiveLearningInterface({
       setError('');
       const sessionData = await AdaptiveLearningAPI.startSession({
         student_name: user?.name || 'Student',
-        subject: selectedSubject
+        subject: selectedSubject,
+        question_count: sessionConfig?.questionCount || 10  // Pass the selected question count
       });
       
       setSession(sessionData);
@@ -118,7 +160,16 @@ export default function AdaptiveLearningInterface({
       setProgress(progressData);
       
     } catch (error) {
-      setError(error instanceof Error ? error.message : 'Failed to load question');
+      if (error instanceof SessionCompleteError) {
+        // Session completed naturally by reaching question limit
+        setPhase('completed');
+        toast({
+          title: "Session Complete! 🎉",
+          description: error.message,
+        });
+      } else {
+        setError(error instanceof Error ? error.message : 'Failed to load question');
+      }
     }
   };
 
@@ -178,6 +229,8 @@ export default function AdaptiveLearningInterface({
     // Check if we've reached the question limit from sessionConfig
     if (sessionConfig && newQuestionsCompleted >= sessionConfig.questionCount) {
       setPhase('completed');
+      // Save session to history
+      await saveSessionToHistory();
       toast({
         title: "Session Complete! 🎯",
         description: `You've completed all ${sessionConfig.questionCount} questions!`,
@@ -188,6 +241,8 @@ export default function AdaptiveLearningInterface({
     // Check if session is complete based on API progress
     if (progress && progress.session_stats.questions_remaining <= 0) {
       setPhase('completed');
+      // Save session to history
+      await saveSessionToHistory();
       return;
     }
     
@@ -337,6 +392,11 @@ export default function AdaptiveLearningInterface({
 
   // Completed phase
   if (phase === 'completed') {
+    // Calculate correct answers from accuracy and total questions
+    const totalQuestions = sessionConfig?.questionCount || progress?.session_stats.questions_answered || 0;
+    const accuracyPercent = parseFloat(progress?.session_stats.accuracy?.replace('%', '') || '0');
+    const correctAnswers = Math.round((accuracyPercent / 100) * totalQuestions);
+    
     return (
       <div className="max-w-2xl mx-auto space-y-6">
         <Card>
@@ -348,15 +408,32 @@ export default function AdaptiveLearningInterface({
               <div className="grid grid-cols-2 gap-4">
                 <div className="text-center p-4 bg-green-50 rounded-lg">
                   <div className="text-2xl font-bold text-green-600">
-                    {progress.session_stats.accuracy}
+                    {correctAnswers}/{totalQuestions}
                   </div>
-                  <div className="text-sm text-green-600">Accuracy</div>
+                  <div className="text-sm text-green-600">Correct Answers</div>
                 </div>
                 <div className="text-center p-4 bg-blue-50 rounded-lg">
                   <div className="text-2xl font-bold text-blue-600">
                     {progress.knowledge_state.bkt_mastery}
                   </div>
                   <div className="text-sm text-blue-600">Mastery Level</div>
+                </div>
+              </div>
+            )}
+            
+            {/* Additional stats */}
+            {progress && (
+              <div className="bg-muted/50 p-4 rounded-lg">
+                <h4 className="font-medium mb-2 text-center">Session Summary</h4>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Accuracy:</span>
+                    <span className="font-medium">{progress.session_stats.accuracy}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-muted-foreground">Questions:</span>
+                    <span className="font-medium">{correctAnswers}/{totalQuestions}</span>
+                  </div>
                 </div>
               </div>
             )}

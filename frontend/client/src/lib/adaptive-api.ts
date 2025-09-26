@@ -11,10 +11,22 @@ export const AVAILABLE_SUBJECTS = {
 
 export type SubjectCode = keyof typeof AVAILABLE_SUBJECTS;
 
+// Custom error for session completion
+export class SessionCompleteError extends Error {
+  public sessionStats: any;
+  
+  constructor(message: string, sessionStats?: any) {
+    super(message);
+    this.name = 'SessionCompleteError';
+    this.sessionStats = sessionStats;
+  }
+}
+
 // Types for adaptive learning system
 export interface AdaptiveStudent {
   student_name: string;
   subject: SubjectCode | string; // Allow both for backward compatibility
+  question_count?: number; // Optional question count with default fallback
 }
 
 export interface AdaptiveSession {
@@ -167,8 +179,15 @@ export class AdaptiveLearningAPI {
       const error = await response.json();
       throw new Error(error.message || 'Failed to get adaptive question');
     }
+
+    const result = await response.json();
     
-    return response.json();
+    // Check if session is complete
+    if (result.session_complete) {
+      throw new SessionCompleteError(result.message || 'Session complete!', result.session_stats);
+    }
+    
+    return result;
   }
 
   /**
@@ -211,6 +230,35 @@ export class AdaptiveLearningAPI {
     
     if (!response.ok) {
       throw new Error('Adaptive learning system health check failed');
+    }
+    
+    return response.json();
+  }
+
+  /**
+   * Complete and save session to history
+   */
+  static async completeSession(data: {
+    session_id: string;
+    total_questions: number;
+    correct_answers: number;
+    session_duration_seconds: number;
+    final_mastery_level: number;
+    student_username: string;  // Add student_username parameter
+  }): Promise<{
+    success: boolean;
+    message: string;
+    session_data: any;
+  }> {
+    const response = await fetch(`${ADAPTIVE_API_BASE}/complete-session/`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to complete session');
     }
     
     return response.json();
