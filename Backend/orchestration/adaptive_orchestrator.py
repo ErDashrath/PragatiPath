@@ -207,16 +207,57 @@ class AdaptiveLearningOrchestrator:
             
             state.difficulty_level = target_difficulty
             
-            # Mock question selection (in real system, query from database)
-            state.current_question = {
-                "id": f"q_{state.iteration_count + 1}_{target_difficulty}",
-                "subject": state.subject,
-                "skill_id": state.skill_id,
-                "difficulty": target_difficulty,
-                "text": f"Adaptive {target_difficulty} question for {state.skill_id}",
-                "options": ["A", "B", "C", "D"],
-                "correct_answer": "A"
+            # Real question selection from database - ANY chapter of the subject
+            from assessment.improved_models import Subject, Chapter
+            
+            # Map subject names to match database format
+            subject_mapping = {
+                'quantitative_aptitude': 'quantitative_aptitude',
+                'logical_reasoning': 'logical_reasoning', 
+                'data_interpretation': 'data_interpretation',
+                'verbal_ability': 'verbal_ability',
+                'mathematics': 'quantitative_aptitude'  # fallback mapping
             }
+            
+            db_subject = subject_mapping.get(state.subject.lower(), 'quantitative_aptitude')
+            
+            # Get all questions from ANY chapter of this subject with target difficulty
+            questions = AdaptiveQuestion.objects.filter(
+                subject_code=db_subject,
+                difficulty=target_difficulty
+            ).order_by('?')  # Random order for variety
+            
+            if questions.exists():
+                selected_question = questions.first()
+                state.current_question = {
+                    "id": str(selected_question.id),
+                    "subject": selected_question.subject_code,
+                    "skill_id": selected_question.subject_code,
+                    "difficulty": selected_question.difficulty,
+                    "text": selected_question.question_text,
+                    "options": [
+                        selected_question.option_a,
+                        selected_question.option_b,
+                        selected_question.option_c,
+                        selected_question.option_d
+                    ],
+                    "correct_answer": selected_question.correct_answer,
+                    "chapter": selected_question.chapter.name if selected_question.chapter else "Mixed Topics"
+                }
+                logger.info(f"🎲 Selected question from chapter: {state.current_question.get('chapter', 'Unknown')}")
+            else:
+                # Fallback to mock if no questions found
+                logger.warning(f"⚠️ No {target_difficulty} questions found for {db_subject}, using mock")
+                state.current_question = {
+                    "id": f"mock_q_{state.iteration_count + 1}_{target_difficulty}",
+                    "subject": state.subject,
+                    "skill_id": state.skill_id,
+                    "difficulty": target_difficulty,
+                    "text": f"Mock {target_difficulty} question for {state.skill_id} (No real questions available)",
+                    "options": ["Option A", "Option B", "Option C", "Option D"],
+                    "correct_answer": "a",
+                    "chapter": "Mock Chapter"
+                }
             
             logger.info(f"🎲 Selected {target_difficulty} question (combined mastery: {combined_mastery:.3f})")
             

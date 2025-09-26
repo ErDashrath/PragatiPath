@@ -34,6 +34,15 @@ from student_model.dkt import DKTService
 
 logger = logging.getLogger(__name__)
 
+# Try to import orchestration service (may not exist yet)
+try:
+    from assessment.orchestration_service import OrchestrationService
+    orchestration_service = OrchestrationService()
+    ORCHESTRATION_AVAILABLE = True
+except ImportError as e:
+    orchestration_service = None
+    ORCHESTRATION_AVAILABLE = False
+
 # Initialize services
 bkt_service = BKTService()
 dkt_service = DKTService()
@@ -92,11 +101,15 @@ def start_simple_session(request):
             'mathematics': 'quantitative_aptitude',
             'math': 'quantitative_aptitude', 
             'quantitative': 'quantitative_aptitude',
+            'quantitative_aptitude': 'quantitative_aptitude',  # Direct mapping
             'reasoning': 'logical_reasoning',
             'logic': 'logical_reasoning',
+            'logical_reasoning': 'logical_reasoning',  # Direct mapping
             'data': 'data_interpretation',
+            'data_interpretation': 'data_interpretation',  # Direct mapping
             'verbal': 'verbal_ability',
-            'english': 'verbal_ability'
+            'english': 'verbal_ability',
+            'verbal_ability': 'verbal_ability'  # Direct mapping - THIS WAS MISSING!
         }
         
         subject_code = subject_mapping.get(subject.lower(), 'quantitative_aptitude')
@@ -166,15 +179,41 @@ def get_simple_question(request, session_id):
         # Count current questions
         question_count = QuestionAttempt.objects.filter(session=session).count() + 1
         
-        # Get current knowledge state for adaptive difficulty
+        # Get current knowledge state for adaptive difficulty using orchestration
         skill_id = f"{subject}_skill_{question_count}"
         
         try:
-            # Try to get BKT mastery
-            bkt_params = bkt_service.get_skill_bkt_params(session.student, skill_id)
-            mastery_level = bkt_params.P_L if bkt_params else 0.5
-        except:
-            mastery_level = 0.5
+            # Try to get BKT mastery with orchestration integration
+            from orchestration.orchestration_service import orchestration_service
+            from student_model.bkt import BKTService
+            from student_model.dkt import DKTService
+            
+            # Get orchestrated knowledge state
+            orchestration_result = orchestration_service.get_comprehensive_knowledge_state(
+                student=session.student,
+                subject=subject,
+                skill_id=skill_id
+            )
+            
+            # Extract mastery from orchestration result
+            if orchestration_result and 'bkt_state' in orchestration_result:
+                bkt_data = orchestration_result['bkt_state'].get(skill_id, {})
+                mastery_level = bkt_data.get('P_L', 0.5)
+                print(f"🧠 Orchestration BKT mastery for {skill_id}: {mastery_level:.3f}")
+            else:
+                # Fallback to direct BKT service
+                bkt_params = bkt_service.get_skill_bkt_params(session.student, skill_id)
+                mastery_level = bkt_params.P_L if bkt_params else 0.5
+                print(f"🔄 Fallback BKT mastery for {skill_id}: {mastery_level:.3f}")
+                
+        except Exception as e:
+            print(f"⚠️ Orchestration failed, using fallback BKT: {e}")
+            try:
+                # Fallback to basic BKT
+                bkt_params = bkt_service.get_skill_bkt_params(session.student, skill_id)
+                mastery_level = bkt_params.P_L if bkt_params else 0.5
+            except:
+                mastery_level = 0.5
         
         # Map adaptive difficulty to database difficulty
         if mastery_level < 0.3:
@@ -437,28 +476,8 @@ def submit_simple_answer(request):
             }
         )
         
-        # Get knowledge state before updates
+        # Get knowledge state before updates using ORCHESTRATION
         skill_id = f"{subject}_skill_{QuestionAttempt.objects.filter(session=session).count()}"
-        
-        # Get BKT state before update
-        try:
-            bkt_before = bkt_service.get_skill_bkt_params(session.student, skill_id)
-            bkt_mastery_before = bkt_before.P_L if bkt_before else 0.5
-            bkt_params_before = {
-                'P_L': bkt_before.P_L if bkt_before else 0.5,
-                'P_T': bkt_before.P_T if bkt_before else 0.3,
-                'P_G': bkt_before.P_G if bkt_before else 0.2,
-                'P_S': bkt_before.P_S if bkt_before else 0.1
-            }
-        except:
-            bkt_mastery_before = 0.5
-            bkt_params_before = {'P_L': 0.5, 'P_T': 0.3, 'P_G': 0.2, 'P_S': 0.1}
-        
-        # Get DKT state before update
-        try:
-            dkt_prediction_before = dkt_service.get_skill_prediction(session.student, skill_id)
-        except:
-            dkt_prediction_before = 0.5
         
         # Get session accuracy before this submission
         previous_attempts = QuestionAttempt.objects.filter(session=session)
@@ -468,45 +487,135 @@ def submit_simple_answer(request):
             session_accuracy_before = correct_before / total_before
         else:
             session_accuracy_before = 0.0
+
+        # Get knowledge state before submission using ORCHESTRATION
+        bkt_mastery_before = 0.5
+        dkt_prediction_before = 0.5
+        bkt_params_before = {'P_L': 0.5, 'P_T': 0.3, 'P_G': 0.2, 'P_S': 0.1}
         
-        # Update BKT
         try:
-            bkt_service.update_skill_bkt(
-                user=session.student,
+            logger.info(f"🎯 Getting pre-submission knowledge state via orchestration for student {session.student.username}, skill {skill_id}")
+            
+            orchestration_result = orchestration_service.get_comprehensive_knowledge_state(
+                student=session.student,
+                subject=session.subject,
+                skill_id=skill_id
+            )
+            
+            if orchestration_result and 'bkt' in orchestration_result:
+                bkt_data = orchestration_result['bkt']
+                if 'mastery' in bkt_data:
+                    bkt_mastery_before = float(bkt_data['mastery'])
+                if 'params' in bkt_data:
+                    bkt_params_before = bkt_data['params']
+                logger.info(f"📊 Orchestrated BKT state before: mastery={bkt_mastery_before}, params={bkt_params_before}")
+            
+            if orchestration_result and 'dkt' in orchestration_result:
+                dkt_data = orchestration_result['dkt']
+                if 'prediction' in dkt_data:
+                    dkt_prediction_before = float(dkt_data['prediction'])
+                logger.info(f"🧠 Orchestrated DKT state before: prediction={dkt_prediction_before}")
+                    
+        except Exception as e:
+            logger.warning(f"⚠️ Orchestration pre-submission state failed: {e}, using fallback")
+            try:
+                # Fallback to individual BKT service
+                bkt_before = bkt_service.get_skill_bkt_params(session.student, skill_id)
+                bkt_mastery_before = bkt_before.P_L if bkt_before else 0.5
+                bkt_params_before = {
+                    'P_L': bkt_before.P_L if bkt_before else 0.5,
+                    'P_T': bkt_before.P_T if bkt_before else 0.3,
+                    'P_G': bkt_before.P_G if bkt_before else 0.2,
+                    'P_S': bkt_before.P_S if bkt_before else 0.1
+                }
+                # Fallback to individual DKT service
+                dkt_prediction_before = dkt_service.get_skill_prediction(session.student, skill_id)
+            except Exception as fallback_error:
+                logger.error(f"❌ Both orchestration and fallback failed: {fallback_error}")
+
+        # Process answer submission via ORCHESTRATION
+        bkt_updated = False
+        dkt_updated = False
+        new_mastery = bkt_mastery_before
+        bkt_params_after = bkt_params_before
+        dkt_prediction_after = dkt_prediction_before
+        
+        try:
+            logger.info(f"🎯 Processing answer submission via orchestration: correct={is_correct}, time_spent={time_spent}")
+            
+            # Use orchestration service to update both BKT and DKT
+            orchestrated_update = orchestration_service.process_interaction(
+                student=session.student,
+                subject=session.subject,
                 skill_id=skill_id,
                 is_correct=is_correct,
-                interaction_data={'question_id': question_id, 'time_spent': time_spent}
+                interaction_data={
+                    'question_id': question_id,
+                    'time_spent': time_spent,
+                    'difficulty': question_for_attempt.difficulty_level,
+                    'question_type': question_for_attempt.question_type
+                }
             )
-            bkt_updated = True
-            # Get updated mastery
-            updated_bkt = bkt_service.get_skill_bkt_params(session.student, skill_id)
-            new_mastery = updated_bkt.P_L if updated_bkt else bkt_mastery_before
-            bkt_params_after = {
-                'P_L': updated_bkt.P_L if updated_bkt else 0.5,
-                'P_T': updated_bkt.P_T if updated_bkt else 0.3,
-                'P_G': updated_bkt.P_G if updated_bkt else 0.2,
-                'P_S': updated_bkt.P_S if updated_bkt else 0.1
-            }
+            
+            if orchestrated_update and 'bkt' in orchestrated_update:
+                bkt_result = orchestrated_update['bkt']
+                if 'updated' in bkt_result and bkt_result['updated']:
+                    bkt_updated = True
+                    if 'mastery' in bkt_result:
+                        new_mastery = float(bkt_result['mastery'])
+                    if 'params' in bkt_result:
+                        bkt_params_after = bkt_result['params']
+                    logger.info(f"✅ Orchestrated BKT update successful: mastery={new_mastery}, params={bkt_params_after}")
+                
+            if orchestrated_update and 'dkt' in orchestrated_update:
+                dkt_result = orchestrated_update['dkt']
+                if 'updated' in dkt_result and dkt_result['updated']:
+                    dkt_updated = True
+                    if 'prediction' in dkt_result:
+                        dkt_prediction_after = float(dkt_result['prediction'])
+                    logger.info(f"✅ Orchestrated DKT update successful: prediction={dkt_prediction_after}")
+                        
         except Exception as e:
-            logger.warning(f"BKT update failed: {e}")
-            bkt_updated = False
-            new_mastery = bkt_mastery_before
-            bkt_params_after = bkt_params_before
-        
-        # Update DKT 
-        try:
-            dkt_service.update_dkt_knowledge(
-                user=session.student,
-                skill_id=skill_id,
-                is_correct=is_correct,
-                interaction_data={'question_id': question_id, 'time_spent': time_spent}
-            )
-            dkt_updated = True
-            dkt_prediction_after = dkt_service.get_skill_prediction(session.student, skill_id)
-        except Exception as e:
-            logger.warning(f"DKT update failed: {e}")
-            dkt_updated = False
-            dkt_prediction_after = dkt_prediction_before
+            logger.warning(f"⚠️ Orchestrated answer processing failed: {e}, using fallback individual updates")
+            
+            # Fallback to individual BKT update
+            try:
+                bkt_service.update_skill_bkt(
+                    user=session.student,
+                    skill_id=skill_id,
+                    is_correct=is_correct,
+                    interaction_data={'question_id': question_id, 'time_spent': time_spent}
+                )
+                bkt_updated = True
+                # Get updated mastery
+                updated_bkt = bkt_service.get_skill_bkt_params(session.student, skill_id)
+                new_mastery = updated_bkt.P_L if updated_bkt else bkt_mastery_before
+                bkt_params_after = {
+                    'P_L': updated_bkt.P_L if updated_bkt else 0.5,
+                    'P_T': updated_bkt.P_T if updated_bkt else 0.3,
+                    'P_G': updated_bkt.P_G if updated_bkt else 0.2,
+                    'P_S': updated_bkt.P_S if updated_bkt else 0.1
+                }
+            except Exception as bkt_error:
+                logger.warning(f"BKT fallback update failed: {bkt_error}")
+                bkt_updated = False
+                new_mastery = bkt_mastery_before
+                bkt_params_after = bkt_params_before
+            
+            # Fallback to individual DKT update 
+            try:
+                dkt_service.update_dkt_knowledge(
+                    user=session.student,
+                    skill_id=skill_id,
+                    is_correct=is_correct,
+                    interaction_data={'question_id': question_id, 'time_spent': time_spent}
+                )
+                dkt_updated = True
+                dkt_prediction_after = dkt_service.get_skill_prediction(session.student, skill_id)
+            except Exception as dkt_error:
+                logger.warning(f"DKT fallback update failed: {dkt_error}")
+                dkt_updated = False
+                dkt_prediction_after = dkt_prediction_before
         
         # Calculate session progress after this submission
         total_questions = QuestionAttempt.objects.filter(session=session).count()
@@ -654,20 +763,49 @@ def get_session_progress(request, session_id):
         total_questions = attempts.count()
         correct_answers = attempts.filter(is_correct=True).count()
         
-        # Get current knowledge states
+        # Get current knowledge states with orchestration
         subject = session.session_config.get('subject', 'mathematics')
         skill_id = f"{subject}_skill_1"
         
         try:
-            bkt_params = bkt_service.get_skill_bkt_params(session.student, skill_id)
-            current_mastery = bkt_params.P_L if bkt_params else 0.5
-        except:
-            current_mastery = 0.5
-        
-        try:
-            dkt_prediction = dkt_service.get_skill_prediction(session.student, skill_id)
-        except:
-            dkt_prediction = 0.5
+            # Enhanced orchestration integration
+            from orchestration.orchestration_service import orchestration_service
+            
+            orchestration_result = orchestration_service.get_comprehensive_knowledge_state(
+                student=session.student,
+                subject=subject,
+                skill_id=skill_id
+            )
+            
+            if orchestration_result:
+                # Extract BKT data
+                bkt_data = orchestration_result.get('bkt_state', {}).get(skill_id, {})
+                current_mastery = bkt_data.get('P_L', 0.5)
+                
+                # Extract DKT data  
+                dkt_data = orchestration_result.get('dkt_state', {})
+                dkt_prediction = dkt_data.get('skill_predictions', [0.5])[0] if dkt_data.get('skill_predictions') else 0.5
+                
+                print(f"📊 Orchestrated Stats - BKT: {current_mastery:.3f}, DKT: {dkt_prediction:.3f}")
+            else:
+                # Fallback to individual services
+                bkt_params = bkt_service.get_skill_bkt_params(session.student, skill_id)
+                current_mastery = bkt_params.P_L if bkt_params else 0.5
+                dkt_prediction = 0.5
+                
+        except Exception as e:
+            print(f"⚠️ Orchestration failed in progress: {e}")
+            # Fallback implementation
+            try:
+                bkt_params = bkt_service.get_skill_bkt_params(session.student, skill_id)
+                current_mastery = bkt_params.P_L if bkt_params else 0.5
+            except:
+                current_mastery = 0.5
+            
+            try:
+                dkt_prediction = dkt_service.get_skill_prediction(session.student, skill_id)
+            except:
+                dkt_prediction = 0.5
         
         progress = {
             'success': True,
@@ -979,9 +1117,9 @@ def setup_simple_urls():
     
     urlpatterns = [
         path('start-session', start_simple_session, name='start_simple_session'),
-        path('get-question', get_simple_question, name='get_simple_question'),
+        path('get-question/<str:session_id>/', get_simple_question, name='get_simple_question'),
         path('submit-answer', submit_simple_answer, name='submit_simple_answer'),
-        path('session-progress', get_session_progress, name='get_session_progress'),
+        path('session-progress/<str:session_id>/', get_session_progress, name='get_session_progress'),
         path('health', api_health, name='api_health'),
     ]
     

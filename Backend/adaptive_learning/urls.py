@@ -23,6 +23,9 @@ from django.conf.urls.static import static
 # Import simple frontend API - direct import since it's at Backend root
 import simple_frontend_api
 
+# Import enhanced history API
+import enhanced_history_api_fixed as enhanced_history_api
+
 # Import app routers
 from core.api import router as core_router
 from student_model.api import router as student_model_router
@@ -90,6 +93,10 @@ urlpatterns = [
     path('simple/submit-answer/', simple_frontend_api.submit_simple_answer, name='submit_simple_answer'),
     path('simple/session-progress/<str:session_id>/', simple_frontend_api.get_session_progress, name='get_session_progress'),
     path('simple/health/', simple_frontend_api.api_health, name='simple_api_health'),
+    # Enhanced History API Endpoints
+    path('history/student/<str:username>/', enhanced_history_api.get_student_session_history, name='student_session_history'),
+    path('history/adaptive-analytics/<str:username>/', enhanced_history_api.get_adaptive_learning_analytics, name='adaptive_analytics'),
+    path('history/session-details/<str:session_id>/', enhanced_history_api.get_session_details, name='session_details'),
 ]
 
 # Serve media files during development

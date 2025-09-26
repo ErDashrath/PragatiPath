@@ -1,0 +1,107 @@
+{
+  "verification_time": "2025-09-26T16:47:45.838640",
+  "summary": {
+    "FAIL": 11,
+    "INFO": 3
+  },
+  "results": [
+    {
+      "endpoint": "/simple/subjects/",
+      "status": "FAIL",
+      "details": "Backend unavailable: Expected 200, got 404",
+      "timestamp": "2025-09-26T16:47:29.449177",
+      "response_data": null
+    },
+    {
+      "endpoint": "/simple/subjects/",
+      "status": "FAIL",
+      "details": "Frontend proxy unavailable: HTTPConnectionPool(host='127.0.0.1', port=5000): Max retries exceeded with url: /simple/subjects/ (Caused by NewConnectionError('<urllib3.connection.HTTPConnection object at 0x000001F546CAFC50>: Failed to establish a new connection: [WinError 10061] No connection could be made because the target machine actively refused it'))",
+      "timestamp": "2025-09-26T16:47:29.449679",
+      "response_data": null
+    },
+    {
+      "endpoint": "/history/student/admin/",
+      "status": "FAIL",
+      "details": "Backend not accessible: Expected 200, got 500",
+      "timestamp": "2025-09-26T16:47:31.480839",
+      "response_data": null
+    },
+    {
+      "endpoint": "/history/adaptive-analytics/admin/",
+      "status": "FAIL",
+      "details": "Backend not accessible: Expected 200, got 500",
+      "timestamp": "2025-09-26T16:47:33.524546",
+      "response_data": null
+    },
+    {
+      "endpoint": "/api/assessment-history/admin/",
+      "status": "FAIL",
+      "details": "Backend not accessible: Expected 200, got 404",
+      "timestamp": "2025-09-26T16:47:35.591320",
+      "response_data": null
+    },
+    {
+      "endpoint": "/api/student-stats/admin/",
+      "status": "FAIL",
+      "details": "Backend not accessible: Expected 200, got 404",
+      "timestamp": "2025-09-26T16:47:37.607294",
+      "response_data": null
+    },
+    {
+      "endpoint": "/simple/subjects/",
+      "status": "FAIL",
+      "details": "Backend endpoint failed: Expected 200, got 404",
+      "timestamp": "2025-09-26T16:47:39.628312",
+      "response_data": null
+    },
+    {
+      "endpoint": "/simple/question/",
+      "status": "FAIL",
+      "details": "Backend endpoint failed: Expected 200, got 404",
+      "timestamp": "2025-09-26T16:47:41.686565",
+      "response_data": null
+    },
+    {
+      "endpoint": "/simple/session-progress/",
+      "status": "FAIL",
+      "details": "Backend endpoint failed: Expected 200, got 404",
+      "timestamp": "2025-09-26T16:47:43.735794",
+      "response_data": null
+    },
+    {
+      "endpoint": "/simple/chapters/",
+      "status": "FAIL",
+      "details": "Backend endpoint failed: Expected 200, got 404",
+      "timestamp": "2025-09-26T16:47:45.812833",
+      "response_data": null
+    },
+    {
+      "endpoint": "session_progress",
+      "status": "FAIL",
+      "details": "Cannot get session progress: HTTP 404",
+      "timestamp": "2025-09-26T16:47:45.820217",
+      "response_data": null
+    },
+    {
+      "endpoint": "/simple/subjects/_json",
+      "status": "INFO",
+      "details": "Non-200 status code: 404",
+      "timestamp": "2025-09-26T16:47:45.825563",
+      "response_data": null
+    },
+    {
+      "endpoint": "/simple/session-progress/_json",
+      "status": "INFO",
+      "details": "Non-200 status code: 404",
+      "timestamp": "2025-09-26T16:47:45.830510",
+      "response_data": null
+    },
+    {
+      "endpoint": "/history/student/admin/_json",
+      "status": "INFO",
+      "details": "Non-200 status code: 500",
+      "timestamp": "2025-09-26T16:47:45.835151",
+      "response_data": null
+    }
+  ]
+}

@@ -1,10 +1,153 @@
-from ninja import Router
-from ninja import Schema
+
+# --- Imports ---
+from ninja import Router, Schema
+from django.contrib.auth import authenticate, login as django_login
 from typing import List, Optional
 from datetime import datetime
 from django.shortcuts import get_object_or_404
+from django.http import JsonResponse
 
+# --- Router instance ---
 router = Router()
+
+# --- Authentication schemas ---
+class LoginSchema(Schema):
+    username: str
+    password: str
+
+class RegisterSchema(Schema):
+    username: str
+    password: str
+    confirm_password: str
+    email: str
+    full_name: str
+
+# --- Authentication endpoints ---
+@router.post("/register")
+def register(request, payload: RegisterSchema):
+    """Register a new student account"""
+    from django.contrib.auth.models import User
+    from core.models import StudentProfile
+    from django.db import IntegrityError
+    
+    try:
+        # Validate password confirmation
+        if payload.password != payload.confirm_password:
+            return JsonResponse({"detail": "Passwords do not match"}, status=400)
+        
+        # Validate password strength
+        if len(payload.password) < 8:
+            return JsonResponse({"detail": "Password must be at least 8 characters long"}, status=400)
+        
+        # Check if username already exists
+        if User.objects.filter(username=payload.username).exists():
+            return JsonResponse({"detail": "Username already exists"}, status=400)
+            
+        # Check if email already exists
+        if User.objects.filter(email=payload.email).exists():
+            return JsonResponse({"detail": "Email already exists"}, status=400)
+        
+        # Create User
+        user = User.objects.create_user(
+            username=payload.username,
+            password=payload.password,  # Django automatically hashes this
+            email=payload.email,
+            first_name=payload.full_name.split()[0] if payload.full_name else "",
+            last_name=" ".join(payload.full_name.split()[1:]) if len(payload.full_name.split()) > 1 else ""
+        )
+        
+        # Create StudentProfile with default values
+        student_profile = StudentProfile.objects.create(
+            user=user,
+            bkt_parameters={},
+            dkt_hidden_state=[],
+            fundamentals={
+                'listening': 0.5,
+                'grasping': 0.5,
+                'retention': 0.5,
+                'application': 0.5
+            },
+            interaction_history=[],
+            current_level={},
+            consecutive_correct_count={},
+            level_lock_status={},
+            subject_progress={}
+        )
+        
+        return {
+            "id": str(student_profile.id),
+            "username": user.username,
+            "email": user.email,
+            "name": payload.full_name,  # Changed from full_name to name
+            "created_at": user.date_joined,
+            "userType": "student",
+            "message": "Account created successfully"
+        }
+        
+    except IntegrityError as e:
+        return JsonResponse({"detail": "Username or email already exists"}, status=400)
+    except Exception as e:
+        print(f"Registration error: {str(e)}")  # For debugging
+        return JsonResponse({"detail": f"Registration failed: {str(e)}"}, status=500)
+
+@router.post("/login")
+def login(request, payload: LoginSchema):
+    user = authenticate(request, username=payload.username, password=payload.password)
+    if user is not None:
+        django_login(request, user)
+        # Try to get StudentProfile if exists
+        try:
+            profile = user.student_profile
+            full_name = user.get_full_name() or user.username
+            return {
+                "id": str(profile.id),
+                "username": user.username,
+                "email": user.email,
+                "name": full_name,  # Changed from full_name to name to match frontend schema
+                "created_at": user.date_joined,
+                "userType": "student"
+            }
+        except Exception:
+            # Not a student, return basic user info
+            return {
+                "id": user.id,
+                "username": user.username,
+                "email": user.email,
+                "name": user.get_full_name() or user.username,  # Changed from full_name to name
+                "created_at": user.date_joined,
+                "userType": "admin"
+            }
+    else:
+        return JsonResponse({"detail": "Invalid username or password"}, status=401)
+
+@router.get("/user")
+def get_current_user(request):
+    """Get the current authenticated user"""
+    if not request.user.is_authenticated:
+        return JsonResponse({"detail": "Not authenticated"}, status=401)
+    
+    user = request.user
+    try:
+        profile = user.student_profile
+        full_name = user.get_full_name() or user.username
+        return {
+            "id": str(profile.id),
+            "username": user.username,
+            "email": user.email,
+            "name": full_name,
+            "created_at": user.date_joined,
+            "userType": "student"
+        }
+    except Exception:
+        # Not a student, return basic user info
+        return {
+            "id": user.id,
+            "username": user.username,
+            "email": user.email,
+            "name": user.get_full_name() or user.username,
+            "created_at": user.date_joined,
+            "userType": "admin"
+        }
 
 # Pydantic schemas for request/response validation
 class StudentSchema(Schema):
@@ -94,39 +237,12 @@ def get_student(request, student_id: str):
 
 @router.post("/students", response=StudentSchema)
 def create_student(request, payload: StudentCreateSchema):
-    """Create a new student"""
+    """Create a new student (DEPRECATED - use /register instead)"""
     from django.contrib.auth.models import User
     from core.models import StudentProfile
     
-    # Create User first
-    user = User.objects.create_user(
-        username=payload.username,
-        email=payload.email,
-        first_name=payload.full_name.split()[0] if payload.full_name else "",
-        last_name=" ".join(payload.full_name.split()[1:]) if len(payload.full_name.split()) > 1 else ""
-    )
-    
-    # Create StudentProfile
-    student_profile = StudentProfile.objects.create(
-        user=user,
-        bkt_parameters={},
-        dkt_hidden_state=[],
-        fundamentals={
-            'listening': 0.5,
-            'grasping': 0.5,
-            'retention': 0.5,
-            'application': 0.5
-        },
-        interaction_history=[]
-    )
-    
-    return {
-        "id": str(student_profile.id),  # Convert to string
-        "username": user.username,
-        "email": user.email,
-        "full_name": payload.full_name,
-        "created_at": user.date_joined
-    }
+    # Redirect to use the proper registration flow
+    return JsonResponse({"detail": "Please use /api/core/register endpoint for new registrations"}, status=400)
 
 @router.put("/students/{student_id}", response=StudentSchema)
 def update_student(request, student_id: str, payload: StudentUpdateSchema):

@@ -176,7 +176,7 @@ CORS_ALLOWED_ORIGINS = [
 ]
 
 CORS_ALLOW_CREDENTIALS = True
-CORS_ALLOW_ALL_ORIGINS = False  # Set to True only for development
+CORS_ALLOW_ALL_ORIGINS = True  # Set to True for development - allows all origins
 
 # Allow specific headers that React needs
 CORS_ALLOW_HEADERS = [
