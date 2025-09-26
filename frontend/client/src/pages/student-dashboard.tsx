@@ -17,6 +17,11 @@ import { type Subject, type Chapter, type AssessmentResult } from "@/lib/assessm
 
 type StudentView = 'dashboard' | 'modules' | 'chapter' | 'assessment' | 'practice' | 'reports' | 'history' | 'historyDetail' | 'adaptive';
 
+interface AssessmentConfig {
+  questionCount: number;
+  timeLimit: number;
+}
+
 export default function StudentDashboard() {
   const [, navigate] = useLocation();
   const { user, logoutMutation } = useAuth();
@@ -26,6 +31,7 @@ export default function StudentDashboard() {
   const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
   const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(null);
   const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(null);
+  const [assessmentConfig, setAssessmentConfig] = useState<AssessmentConfig>({ questionCount: 10, timeLimit: 15 });
 
   useEffect(() => {
     if (user?.userType === 'admin') {
@@ -52,9 +58,12 @@ export default function StudentDashboard() {
     setCurrentView('chapter');
   };
 
-  const handleChapterSelect = (chapter: Chapter, subject: Subject) => {
+  const handleChapterSelect = (chapter: Chapter, subject: Subject, config?: AssessmentConfig) => {
     setSelectedChapter(chapter);
     setSelectedSubject(subject);
+    if (config) {
+      setAssessmentConfig(config);
+    }
     setCurrentView('assessment');
   };
 

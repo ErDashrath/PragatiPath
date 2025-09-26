@@ -1,17 +1,29 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, CheckCircle, PlayCircle, Lock } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, CheckCircle, PlayCircle, Lock, Clock, HelpCircle, Settings } from "lucide-react";
 import { AssessmentAPI, type Subject, type Chapter } from "@/lib/assessment-api";
 
 interface ChapterViewProps {
   subjectCode: string;
   onBackToModules: () => void;
-  onChapterSelect: (chapter: Chapter, subject: Subject) => void;
+  onChapterSelect: (chapter: Chapter, subject: Subject, config?: AssessmentConfig) => void;
+}
+
+interface AssessmentConfig {
+  questionCount: number;
+  timeLimit: number; // in minutes
 }
 
 export default function ChapterView({ subjectCode, onBackToModules, onChapterSelect }: ChapterViewProps) {
+  const [selectedChapter, setSelectedChapter] = useState<Chapter | null>(null);
+  const [questionCount, setQuestionCount] = useState<number>(10);
+  const [timeLimit, setTimeLimit] = useState<number>(15);
+  const [showConfig, setShowConfig] = useState<number | null>(null);
   // Get subject details
   const { data: subjects } = useQuery({
     queryKey: ["subjects"],
@@ -96,18 +108,38 @@ export default function ChapterView({ subjectCode, onBackToModules, onChapterSel
         <h2 className="text-2xl font-bold text-foreground mb-2">
           {subject.name}
         </h2>
-        <p className="text-muted-foreground">Select a chapter to start assessment</p>
+        <p className="text-muted-foreground mb-4">Select a chapter to start assessment</p>
+        
+        {/* Default Configuration Display */}
+        <Card className="mb-6 border-primary/20 bg-primary/5">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-4 text-sm">
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Settings className="h-4 w-4" />
+                <span className="font-medium">Default Settings:</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <HelpCircle className="h-3 w-3" />
+                <span>{questionCount} Questions</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Clock className="h-3 w-3" />
+                <span>{timeLimit} Minutes</span>
+              </div>
+              <Badge variant="secondary" className="text-xs">Customizable per chapter</Badge>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6" data-testid="chapters-grid">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="chapters-grid">
         {chapters?.map((chapter: Chapter) => (
           <Card
             key={chapter.id}
-            className="hover:shadow-md transition-all duration-300 cursor-pointer"
-            onClick={() => onChapterSelect(chapter, subject)}
+            className="hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/30"
             data-testid={`chapter-card-${chapter.id}`}
           >
-            <CardContent className="p-6">
+            <CardContent className="p-6 space-y-4">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-lg font-semibold text-foreground">
                   {chapter.name}
@@ -115,26 +147,110 @@ export default function ChapterView({ subjectCode, onBackToModules, onChapterSel
                 <PlayCircle className="h-6 w-6 text-primary" />
               </div>
               
-              <p className="text-sm text-muted-foreground mb-4">
+              <p className="text-sm text-muted-foreground mb-4 min-h-[40px]">
                 {chapter.description}
               </p>
               
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-primary">
+              <div className="space-y-4">
+                <Badge variant="outline" className="text-xs">
                   Chapter {chapter.chapter_number}
-                </span>
-                
-                <Button
-                  size="sm"
-                  className="ml-2"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onChapterSelect(chapter, subject);
-                  }}
-                  data-testid={`button-start-chapter-${chapter.id}`}
-                >
-                  Start Assessment
-                </Button>
+                </Badge>
+
+                {/* Assessment Configuration */}
+                {showConfig === chapter.id ? (
+                  <div className="space-y-4 p-4 bg-muted/30 rounded-lg">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Settings className="h-4 w-4 text-primary" />
+                      <span className="text-sm font-semibold text-foreground">Assessment Settings</span>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium flex items-center gap-1">
+                          <HelpCircle className="h-3 w-3" />
+                          Number of Questions
+                        </Label>
+                        <Select value={questionCount.toString()} onValueChange={(value) => setQuestionCount(parseInt(value))}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Select questions" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="5">5 Questions</SelectItem>
+                            <SelectItem value="10">10 Questions</SelectItem>
+                            <SelectItem value="15">15 Questions</SelectItem>
+                            <SelectItem value="20">20 Questions</SelectItem>
+                            <SelectItem value="25">25 Questions</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      
+                      <div className="space-y-2">
+                        <Label className="text-xs font-medium flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          Time Limit
+                        </Label>
+                        <Select value={timeLimit.toString()} onValueChange={(value) => setTimeLimit(parseInt(value))}>
+                          <SelectTrigger className="h-8 text-xs">
+                            <SelectValue placeholder="Select time" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="5">5 Minutes</SelectItem>
+                            <SelectItem value="10">10 Minutes</SelectItem>
+                            <SelectItem value="15">15 Minutes</SelectItem>
+                            <SelectItem value="20">20 Minutes</SelectItem>
+                            <SelectItem value="30">30 Minutes</SelectItem>
+                            <SelectItem value="45">45 Minutes</SelectItem>
+                            <SelectItem value="60">60 Minutes</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                    
+                    <div className="flex gap-2 mt-4">
+                      <Button
+                        size="sm"
+                        className="flex-1 h-8 text-xs"
+                        onClick={() => {
+                          const config: AssessmentConfig = { questionCount, timeLimit };
+                          onChapterSelect(chapter, subject, config);
+                        }}
+                        data-testid={`button-start-chapter-${chapter.id}`}
+                      >
+                        Start Assessment
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 text-xs"
+                        onClick={() => setShowConfig(null)}
+                      >
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span className="flex items-center gap-1">
+                        <HelpCircle className="h-3 w-3" />
+                        Questions: {questionCount}
+                      </span>
+                      <span className="flex items-center gap-1">
+                        <Clock className="h-3 w-3" />
+                        Time: {timeLimit}min
+                      </span>
+                    </div>
+                    
+                    <Button
+                      size="sm"
+                      className="w-full h-8 text-xs"
+                      onClick={() => setShowConfig(chapter.id)}
+                      data-testid={`button-configure-chapter-${chapter.id}`}
+                    >
+                      Configure & Start
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
