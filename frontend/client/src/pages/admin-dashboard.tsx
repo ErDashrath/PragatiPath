@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { GraduationCap, LogOut, Menu } from "lucide-react";
 import AdminOverview from "@/components/admin/admin-overview";
 import StudentsList from "@/components/admin/students-list";
+import EnhancedReportsView from "@/components/admin/enhanced-reports-view";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
 type AdminView = 'overview' | 'students' | 'analytics' | 'reports';
@@ -113,12 +114,7 @@ export default function AdminDashboard() {
             <p className="text-muted-foreground">Advanced analytics and insights coming soon...</p>
           </div>
         )}
-        {currentView === 'reports' && (
-          <div className="text-center py-12">
-            <h2 className="text-2xl font-bold text-foreground mb-4">Detailed Reports</h2>
-            <p className="text-muted-foreground">Comprehensive reporting features coming soon...</p>
-          </div>
-        )}
+        {currentView === 'reports' && <EnhancedReportsView />}
       </main>
     </div>
   );

@@ -8,7 +8,7 @@ import ModulesView from "@/components/student/modules-view";
 import ChapterView from "@/components/student/chapter-view";
 import AssessmentInterface from "@/components/student/assessment-interface-new";
 import PracticeView from "@/components/student/practice-view";
-import ReportsView from "@/components/student/enhanced-reports-view";
+import ReportsView from "@/components/student/personal-reports-view";
 import { AssessmentHistory } from "@/components/student/assessment-history";
 import { DetailedResultView } from "@/components/student/detailed-result-view";
 import AdaptiveLearningInterface from "@/components/student/adaptive-learning-interface";
