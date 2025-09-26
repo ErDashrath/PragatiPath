@@ -14,11 +14,17 @@ import {
   type AssessmentResult
 } from "@/lib/assessment-api";
 
+interface AssessmentConfig {
+  questionCount: number;
+  timeLimit: number;
+}
+
 interface AssessmentInterfaceProps {
   chapter: Chapter;
   subject: Subject;
   onComplete: (result: AssessmentResult) => void;
   onBack: () => void;
+  config?: AssessmentConfig;
 }
 
 type AssessmentState = 'setup' | 'active' | 'completed' | 'results';
@@ -27,7 +33,8 @@ export default function AssessmentInterface({
   chapter, 
   subject, 
   onComplete, 
-  onBack 
+  onBack,
+  config 
 }: AssessmentInterfaceProps) {
   const { user } = useAuth();
   const [assessmentState, setAssessmentState] = useState<AssessmentState>('setup');
@@ -44,10 +51,10 @@ export default function AssessmentInterface({
     confidence: number;
   }>>([]);
 
-  // Assessment configuration
+  // Assessment configuration - use passed config or defaults
   const [assessmentConfig, setAssessmentConfig] = useState({
-    questionCount: 10,
-    timeLimit: 10, // Changed to 10 minutes
+    questionCount: config?.questionCount || 10,
+    timeLimit: config?.timeLimit || 15,
     assessmentType: 'PRACTICE'
   });
 
@@ -64,7 +71,11 @@ export default function AssessmentInterface({
     onSuccess: (response) => {
       setAssessmentId(response.assessment_id);
       setAssessmentState('active');
-      setTimeRemaining(response.time_limit_minutes ? response.time_limit_minutes * 60 : 1800);
+      // Use configured time limit or API response or default to 30 minutes
+      const timeLimitSeconds = response.time_limit_minutes 
+        ? response.time_limit_minutes * 60 
+        : assessmentConfig.timeLimit * 60;
+      setTimeRemaining(timeLimitSeconds);
       setQuestionStartTime(Date.now());
     },
     onError: (error) => {

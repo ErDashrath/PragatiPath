@@ -187,6 +187,7 @@ export default function StudentDashboard() {
             chapter={selectedChapter}
             onComplete={handleAssessmentComplete}
             onBack={() => setCurrentView('chapter')}
+            config={assessmentConfig}
           />
         )}
         {currentView === 'practice' && <PracticeView />}
