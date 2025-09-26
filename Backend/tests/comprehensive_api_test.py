@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Comprehensive API Test Suite for ZenithLearn Backend
+Comprehensive API Test Suite for PragatiPathLearn Backend
 Tests all API endpoints to verify frontend integration
 """
 
@@ -10,7 +10,7 @@ import time
 from datetime import datetime
 from typing import Dict, Any, List
 
-class ZenithLearnAPITester:
+class PragatiPathLearnAPITester:
     def __init__(self, base_url="http://localhost:8000"):
         self.base_url = base_url
         self.test_student_id = "9bbcc9f4-bfe8-450f-b2fa-95f567625681"
@@ -81,7 +81,7 @@ class ZenithLearnAPITester:
     
     def run_all_tests(self):
         """Run comprehensive tests for all API endpoints"""
-        print("🚀 Starting Comprehensive ZenithLearn API Test Suite")
+        print("🚀 Starting Comprehensive PragatiPathLearn API Test Suite")
         print("=" * 80)
         
         # 1. Health Check
@@ -235,12 +235,12 @@ class ZenithLearnAPITester:
 
 def main():
     """Main function to run the comprehensive API test"""
-    print("🔥 ZenithLearn API Comprehensive Test Suite")
+    print("🔥 PragatiPathLearn API Comprehensive Test Suite")
     print("Testing all backend endpoints for frontend integration")
     print("-" * 80)
     
     # Initialize the tester
-    tester = ZenithLearnAPITester()
+    tester = PragatiPathLearnAPITester()
     
     # Run all tests
     results = tester.run_all_tests()
