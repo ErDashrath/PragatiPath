@@ -93,11 +93,11 @@ interface QuestionAnalytic {
   most_common_wrong_answer?: string;
 }
 
-type ReportsTab = 'overview' | 'analytics' | 'sessions' | 'students' | 'questions';
+type ReportsTab = 'analytics' | 'sessions' | 'students' | 'questions';
 
 export default function ReportsView() {
   const { user } = useAuth();
-  const [activeTab, setActiveTab] = useState<ReportsTab>('overview');
+  const [activeTab, setActiveTab] = useState<ReportsTab>('analytics');
   
   // Analytics Data States
   const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
@@ -153,45 +153,6 @@ export default function ReportsView() {
     }
   }, [activeTab]);
 
-  // Static data for personal overview
-  const performanceData = [
-    { week: 'Week 1', score: 60, height: '120px' },
-    { week: 'Week 2', score: 70, height: '140px' },
-    { week: 'Week 3', score: 80, height: '160px' },
-    { week: 'Week 4', score: 90, height: '180px' },
-    { week: 'This Week', score: 100, height: '200px' },
-  ];
-
-  const learningGaps = [
-    {
-      type: 'critical',
-      title: 'Critical Gaps',
-      count: 2,
-      items: ['Formula retention (Quantitative)', 'Audio comprehension (All modules)'],
-      bgColor: 'bg-destructive/10',
-      borderColor: 'border-destructive/20',
-      textColor: 'text-destructive',
-    },
-    {
-      type: 'moderate', 
-      title: 'Moderate Gaps',
-      count: 1,
-      items: ['Pattern recognition (Logical Reasoning)'],
-      bgColor: 'bg-accent/10',
-      borderColor: 'border-accent/20',
-      textColor: 'text-accent',
-    },
-    {
-      type: 'strengths',
-      title: 'Strengths',
-      count: 3,
-      items: ['Problem application (All modules)', 'Vocabulary (Verbal Ability)', 'Basic concepts (Quantitative)'],
-      bgColor: 'bg-chart-4/10',
-      borderColor: 'border-chart-4/20',
-      textColor: 'text-chart-4',
-    },
-  ];
-
   // Process analytics data
   const getPerformanceTrendData = () => {
     if (!dashboardData?.performance_trends?.daily_accuracy) return [];
@@ -234,7 +195,6 @@ export default function ReportsView() {
   };
 
   const tabs = [
-    { key: 'overview', label: 'My Overview', icon: <Target className="w-4 h-4" /> },
     { key: 'analytics', label: 'System Analytics', icon: <BarChart3 className="w-4 h-4" /> },
     { key: 'sessions', label: 'Session Reports', icon: <LineChart className="w-4 h-4" /> },
     { key: 'students', label: 'Student Performance', icon: <TrendingUp className="w-4 h-4" /> },
@@ -327,7 +287,6 @@ export default function ReportsView() {
       )}
 
       {/* Tab Content */}
-      {activeTab === 'overview' && <PersonalOverviewTab />}
       {activeTab === 'analytics' && <AnalyticsOverviewTab data={dashboardData} trendData={getPerformanceTrendData()} />}
       {activeTab === 'sessions' && <SessionReportsTab data={sessionReports} chartData={getSessionAccuracyData()} />}
       {activeTab === 'students' && <StudentPerformanceTab data={studentReports} chartData={getStudentRankingData()} />}
@@ -335,88 +294,6 @@ export default function ReportsView() {
     </div>
   );
 
-  // Personal Overview Component (Original reports view)
-  function PersonalOverviewTab() {
-    return (
-      <div className="space-y-6">
-        {/* Performance Overview */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Performance Chart */}
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-foreground mb-4">My Performance Trend</h3>
-              <div className="h-64 flex items-end justify-between space-x-2">
-                {performanceData.map((data, index) => (
-                  <div key={index} className="flex flex-col items-center space-y-2">
-                    <div
-                      className="bg-primary rounded-t transition-all duration-300 hover:bg-primary/80 cursor-pointer"
-                      style={{ height: data.height, width: '32px' }}
-                      title={`${data.week}: ${data.score}%`}
-                    />
-                    <span className="text-xs text-muted-foreground">{data.week}</span>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-
-          {/* Learning Gap Analysis */}
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-foreground mb-4">My Learning Gaps</h3>
-              <div className="space-y-4">
-                {learningGaps.map((gap) => (
-                  <div
-                    key={gap.type}
-                    className={`p-4 rounded-lg border ${gap.bgColor} ${gap.borderColor}`}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <span className={`font-medium ${gap.textColor}`}>{gap.title}</span>
-                      <span className={`text-sm ${gap.textColor}`}>{gap.count} area{gap.count > 1 ? 's' : ''}</span>
-                    </div>
-                    <ul className={`text-sm ${gap.textColor} space-y-1`}>
-                      {gap.items.map((item, index) => (
-                        <li key={index}>• {item}</li>
-                      ))}
-                    </ul>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Study Insights */}
-        <Card>
-          <CardContent className="p-6">
-            <h3 className="text-lg font-semibold text-foreground mb-4">My Study Insights</h3>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="text-center p-4 rounded-lg bg-primary/10">
-                <div className="text-2xl font-bold text-primary mb-2">45</div>
-                <div className="text-sm text-foreground">Practice Sessions</div>
-                <div className="text-xs text-muted-foreground">This month</div>
-              </div>
-              <div className="text-center p-4 rounded-lg bg-secondary/10">
-                <div className="text-2xl font-bold text-secondary mb-2">12h</div>
-                <div className="text-sm text-foreground">Study Time</div>
-                <div className="text-xs text-muted-foreground">This week</div>
-              </div>
-              <div className="text-center p-4 rounded-lg bg-accent/10">
-                <div className="text-2xl font-bold text-accent mb-2">87%</div>
-                <div className="text-sm text-foreground">Avg. Accuracy</div>
-                <div className="text-xs text-muted-foreground">Last 30 days</div>
-              </div>
-              <div className="text-center p-4 rounded-lg bg-chart-4/10">
-                <div className="text-2xl font-bold text-chart-4 mb-2">15</div>
-                <div className="text-sm text-foreground">Concepts Mastered</div>
-                <div className="text-xs text-muted-foreground">This month</div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
 
   // Analytics Overview Component
   function AnalyticsOverviewTab({ data, trendData }: { data: DashboardData | null; trendData: any[] }) {
