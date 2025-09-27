@@ -42,6 +42,16 @@ export default defineConfig({
         changeOrigin: true,
         secure: false,
       },
+      "/history": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        secure: false,
+      },
+      "/simple": {
+        target: "http://localhost:8000",
+        changeOrigin: true,
+        secure: false,
+      },
     },
   },
 });
