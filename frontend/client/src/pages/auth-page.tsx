@@ -208,7 +208,7 @@ export default function AuthPage() {
                   <div className="text-center text-sm text-muted-foreground space-y-2">
                     <p>Demo Credentials:</p>
                     <p>Student: student / password</p>
-                    <p>Admin: admin / password</p>
+                    <p>Admin: admin / admin123</p>
                   </div>
                 </>
               )}

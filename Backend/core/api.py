@@ -149,6 +149,17 @@ def get_current_user(request):
             "userType": "admin"
         }
 
+@router.post("/logout")
+def logout(request):
+    """Logout the current user"""
+    from django.contrib.auth import logout as django_logout
+    
+    if request.user.is_authenticated:
+        django_logout(request)
+        return {"message": "Successfully logged out"}
+    else:
+        return JsonResponse({"detail": "Not authenticated"}, status=401)
+
 # Pydantic schemas for request/response validation
 class StudentSchema(Schema):
     id: Optional[str] = None  # Changed to str to support UUID

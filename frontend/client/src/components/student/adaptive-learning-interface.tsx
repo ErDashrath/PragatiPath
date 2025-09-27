@@ -4,7 +4,18 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { AlertCircle, Clock, Brain, Target, TrendingUp, ArrowLeft, Globe } from "lucide-react";
+import { 
+  BookOpen, 
+  Clock, 
+  TrendingUp, 
+  CheckCircle, 
+  XCircle, 
+  Brain, 
+  Trophy, 
+  Target,
+  Globe,
+  Sparkles
+} from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
 import { IndianTimeUtils } from "@/lib/indian-time-utils";
@@ -50,42 +61,43 @@ export default function AdaptiveLearningInterface({
   const [timeRemaining, setTimeRemaining] = useState<number>(0);
   const [questionsCompleted, setQuestionsCompleted] = useState(0);
   const [sessionStartTime, setSessionStartTime] = useState<Date | null>(null);
+  const [backendUserId, setBackendUserId] = useState<number | null>(null); // Store the Django backend user ID
 
-  // Helper function to save session to backend for history
+  // Helper function to complete session and save to backend for history with mastery tracking
   const saveSessionToHistory = async () => {
-    if (!session || !progress || !sessionStartTime || !sessionConfig) return;
+    if (!session) return;
 
     try {
-      const sessionDurationSeconds = Math.floor(
-        (Date.now() - sessionStartTime.getTime()) / 1000
-      );
-
-      // Calculate correct answers from progress if available
-      const correctAnswers = progress.session_stats?.correct_answers || 0;
-      const totalQuestions = questionsCompleted;
-      
-      // Extract mastery level from knowledge state (convert percentage string to number)
-      const masteryString = progress.knowledge_state?.bkt_mastery || '0%';
-      const finalMasteryLevel = parseFloat(masteryString.replace('%', '')) / 100;
-
-      const sessionData = {
+      const result = await AdaptiveLearningAPI.completeSession({
         session_id: session.session_id,
-        total_questions: totalQuestions,
-        correct_answers: correctAnswers,
-        session_duration_seconds: sessionDurationSeconds,
-        final_mastery_level: finalMasteryLevel,
-        student_username: user?.username || 'unknown'  // Add current user's username
-      };
-
-      await AdaptiveLearningAPI.completeSession(sessionData);
-      
-      toast({
-        title: "Session Saved! 📊",
-        description: "Your learning session has been saved to history.",
+        completion_reason: 'finished'
       });
+      
+      if (result.success) {
+        const finalMastery = result.completion_data.final_mastery;
+        
+        toast({
+          title: "🎉 Session Completed!",
+          description: `Final Mastery: ${finalMastery.bkt_mastery} (${finalMastery.mastery_level} level)`,
+        });
+
+        console.log('Session completed with mastery data:', {
+          mastery_level: finalMastery.mastery_level,
+          bkt_mastery: finalMastery.bkt_mastery,
+          dkt_prediction: finalMastery.dkt_prediction,
+          combined_confidence: finalMastery.combined_confidence,
+          mastery_achieved: finalMastery.mastery_achieved
+        });
+      }
     } catch (error) {
-      console.error('Failed to save session:', error);
-      // Don't show error toast to avoid disrupting completion experience
+      console.error('Failed to complete session:', error);
+      
+      // Show error toast as this is important for history tracking
+      toast({
+        title: "⚠️ Session Save Failed",
+        description: "Session completed but may not appear in history. Please try refreshing.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -122,6 +134,16 @@ export default function AdaptiveLearningInterface({
       });
       
       setSession(sessionData);
+      
+      // Store the backend user ID for history tracking
+      if ('user_id' in sessionData) {
+        const userId = sessionData.user_id as number;
+        setBackendUserId(userId);
+        
+        // Store in localStorage for consistent history access across components
+        localStorage.setItem('pragatipath_backend_user_id', userId.toString());
+        console.log('Stored backend user ID for history:', userId);
+      }
       setPhase('learning');
       
       // Initialize timer if sessionConfig is available
@@ -463,11 +485,12 @@ export default function AdaptiveLearningInterface({
   // Learning phase
   return (
     <div className="max-w-4xl mx-auto space-y-6">
-      {/* Progress Header */}
+      {/* Progress Header with Orchestration */}
       {progress && (
         <Card>
           <CardContent className="pt-6">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Main Stats Grid */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="text-center">
                 <div className="text-2xl font-bold text-primary">
                   {progress.session_stats.questions_answered}
@@ -484,17 +507,49 @@ export default function AdaptiveLearningInterface({
                 <div className="text-2xl font-bold text-blue-600">
                   {progress.knowledge_state.bkt_mastery}
                 </div>
-                <div className="text-sm text-muted-foreground">Mastery Level</div>
+                <div className="text-sm text-muted-foreground">BKT Mastery</div>
               </div>
               <div className="text-center">
                 <div className="text-2xl font-bold text-purple-600">
-                  {progress.adaptive_info.next_difficulty}
+                  {progress.knowledge_state.dkt_prediction}
                 </div>
-                <div className="text-sm text-muted-foreground">Next Difficulty</div>
+                <div className="text-sm text-muted-foreground">DKT Prediction</div>
               </div>
             </div>
+
+            {/* LangGraph Orchestration Status */}
+            {progress.knowledge_state.orchestration_enabled && (
+              <div className="mb-4 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+                <div className="flex items-center gap-2 mb-2">
+                  <Brain className="h-5 w-5 text-blue-600" />
+                  <span className="font-medium text-blue-800">LangGraph Orchestration Active</span>
+                  <Badge variant="secondary" className="bg-green-100 text-green-800">
+                    🧠 AI-Powered
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-blue-600">Combined Confidence:</span>
+                    <span className="font-mono font-bold">{progress.knowledge_state.combined_confidence}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-600">Next Difficulty:</span>
+                    <span className="font-medium">{progress.adaptive_info.next_difficulty}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-blue-600">BKT+DKT Integrated:</span>
+                    <span className="text-green-600">✅ Yes</span>
+                  </div>
+                </div>
+                {progress.orchestration_details && (
+                  <div className="mt-2 text-xs text-blue-700 bg-blue-100 p-2 rounded">
+                    💡 {progress.orchestration_details.adaptive_reasoning}
+                  </div>
+                )}
+              </div>
+            )}
             
-            <div className="mt-4 space-y-3">
+            <div className="space-y-3">
               {/* Session Configuration Info */}
               {sessionConfig && (
                 <div className="space-y-3">
@@ -548,10 +603,47 @@ export default function AdaptiveLearningInterface({
         </Card>
       )}
 
-      {/* Current Question */}
+      {/* Current Question with Orchestration */}
       {currentQuestion && (
         <Card>
           <CardHeader>
+            {/* Orchestration Status Banner */}
+            {currentQuestion.orchestration_enabled && (
+              <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="h-5 w-5 text-purple-600" />
+                    <span className="font-medium text-purple-800">AI-Orchestrated Question</span>
+                    <Badge className="bg-green-100 text-green-800">
+                      🧠 LangGraph Active
+                    </Badge>
+                  </div>
+                  <Badge className="bg-purple-100 text-purple-800">
+                    BKT: {currentQuestion.bkt_mastery} | DKT: {currentQuestion.dkt_prediction}
+                  </Badge>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-purple-600">Combined Confidence:</span>
+                    <span className="font-mono font-bold">{currentQuestion.confidence}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-purple-600">Knowledge State:</span>
+                    <span className="font-medium text-blue-600">Tracked</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-purple-600">Adaptation:</span>
+                    <span className="font-medium text-green-600">Real-time</span>
+                  </div>
+                </div>
+                {currentQuestion.adaptive_reason && (
+                  <div className="mt-3 text-sm text-purple-700 bg-purple-100 p-3 rounded">
+                    <strong>🎯 Personalized Selection:</strong> {currentQuestion.adaptive_reason}
+                  </div>
+                )}
+              </div>
+            )}
+            
             <div className="flex justify-between items-start">
               <div className="space-y-2">
                 <CardTitle className="flex items-center space-x-2">
@@ -559,16 +651,26 @@ export default function AdaptiveLearningInterface({
                   <Badge className={AdaptiveLearningUtils.getDifficultyColor(currentQuestion.difficulty)}>
                     {AdaptiveLearningUtils.getDifficultyEmoji(currentQuestion.difficulty)} {currentQuestion.difficulty.toUpperCase()}
                   </Badge>
+                  {currentQuestion.orchestration_enabled && (
+                    <Badge className="bg-gradient-to-r from-purple-500 to-blue-500 text-white">
+                      🚀 Orchestrated
+                    </Badge>
+                  )}
                 </CardTitle>
                 <p className="text-sm text-muted-foreground">
                   {currentQuestion.adaptive_info.adaptive_reason}
                 </p>
               </div>
-              <div className="text-right">
+              <div className="text-right space-y-1">
                 <div className="flex items-center text-muted-foreground text-sm">
                   <Clock className="w-4 h-4 mr-1" />
                   <span>Mastery: {AdaptiveLearningUtils.formatMasteryLevel(currentQuestion.adaptive_info.mastery_level)}</span>
                 </div>
+                {currentQuestion.orchestration_enabled && (
+                  <div className="text-xs text-purple-600 font-medium">
+                    🧠 BKT+DKT Integrated
+                  </div>
+                )}
               </div>
             </div>
           </CardHeader>
@@ -606,7 +708,7 @@ export default function AdaptiveLearningInterface({
         </Card>
       )}
 
-      {/* Feedback */}
+      {/* Enhanced Feedback with Orchestration */}
       {showFeedback && feedback && (
         <Card>
           <CardHeader>
@@ -615,6 +717,43 @@ export default function AdaptiveLearningInterface({
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Orchestration Feedback Banner */}
+            {feedback.orchestration_feedback && (
+              <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 rounded-lg border border-indigo-200">
+                <div className="flex items-center gap-2 mb-3">
+                  <Brain className="h-5 w-5 text-indigo-600" />
+                  <span className="font-medium text-indigo-800">LangGraph Orchestration Insights</span>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-3">
+                  <div className="space-y-2">
+                    <div className="text-sm">
+                      <span className="text-indigo-600 font-medium">BKT Update:</span>
+                      <span className="ml-2 font-mono">{feedback.orchestration_feedback.bkt_mastery_change}</span>
+                    </div>
+                    <div className="text-sm">
+                      <span className="text-indigo-600 font-medium">DKT Prediction:</span>
+                      <span className="ml-2 font-mono">{feedback.orchestration_feedback.dkt_prediction_change}</span>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-sm">
+                      <span className="text-indigo-600 font-medium">Combined Confidence:</span>
+                      <span className="ml-2 font-mono font-bold">{feedback.orchestration_feedback.combined_confidence_new}</span>
+                    </div>
+                    <div className="text-sm">
+                      <span className="text-indigo-600 font-medium">Next Strategy:</span>
+                      <span className="ml-2">{feedback.orchestration_feedback.next_adaptation_strategy}</span>
+                    </div>
+                  </div>
+                </div>
+                {feedback.orchestration_feedback.learning_insight && (
+                  <div className="text-sm text-indigo-700 bg-indigo-100 p-3 rounded">
+                    💡 <strong>Learning Insight:</strong> {feedback.orchestration_feedback.learning_insight}
+                  </div>
+                )}
+              </div>
+            )}
+            
             <div className="p-4 bg-muted rounded-lg">
               <div className="font-medium mb-2">Explanation:</div>
               <div>{feedback.explanation}</div>

@@ -357,6 +357,99 @@ class DKTService:
         
         return 0.5  # Default prediction
     
+    def predict_performance(self, student_username: str, subject: str) -> Dict[str, Any]:
+        """
+        Predict performance for a student in a subject (orchestration compatibility method)
+        
+        Args:
+            student_username: Username of the student
+            subject: Subject name
+            
+        Returns:
+            Dict containing predicted performance and metadata
+        """
+        try:
+            from django.contrib.auth.models import User
+            user = User.objects.get(username=student_username)
+            
+            # Create skill_id for the subject
+            skill_id = f"{subject}_skill"
+            
+            # Get DKT prediction
+            predicted_performance = self.get_skill_prediction(user, skill_id)
+            
+            return {
+                'success': True,
+                'predicted_performance': predicted_performance,
+                'skill_id': skill_id,
+                'confidence': predicted_performance,
+                'timestamp': str(timezone.now())
+            }
+            
+        except User.DoesNotExist:
+            return {
+                'success': False,
+                'predicted_performance': 0.5,
+                'error': f'User {student_username} not found'
+            }
+        except Exception as e:
+            return {
+                'success': False, 
+                'predicted_performance': 0.5,
+                'error': str(e)
+            }
+    
+    def update_knowledge_state(
+        self, 
+        student_username: str, 
+        subject: str, 
+        question_id: str, 
+        is_correct: bool, 
+        time_spent: float
+    ) -> Dict[str, Any]:
+        """
+        Update knowledge state for orchestration compatibility
+        
+        Args:
+            student_username: Username of the student
+            subject: Subject name  
+            question_id: Question identifier
+            is_correct: Whether answer was correct
+            time_spent: Time spent on question
+            
+        Returns:
+            Dict containing update results
+        """
+        try:
+            from django.contrib.auth.models import User
+            user = User.objects.get(username=student_username)
+            
+            # Create skill_id for the subject
+            skill_id = f"{subject}_skill"
+            
+            # Update DKT knowledge using existing method
+            result = self.update_dkt_knowledge(
+                user=user,
+                skill_id=skill_id,
+                is_correct=is_correct,
+                response_time=time_spent,
+                question_id=question_id
+            )
+            
+            return {
+                'success': True,
+                'predicted_performance': result.get('new_prediction', 0.5),
+                'skill_id': skill_id,
+                'update_result': result
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'predicted_performance': 0.5,
+                'error': str(e)
+            }
+    
     def get_all_predictions(self, user: User) -> Dict[str, float]:
         """Get DKT predictions for all skills"""
         dkt_state = self.get_dkt_state(user)
@@ -464,3 +557,52 @@ class DKTService:
                 skill: 0.5 for skill in self.DEFAULT_SKILLS
             }
         }
+    
+    def initialize_student(self, student_username: str, subject: str) -> Dict[str, Any]:
+        """
+        Initialize DKT state for a new student
+        
+        Args:
+            student_username: Username of the student
+            subject: Subject to initialize
+            
+        Returns:
+            Dict containing initialization status
+        """
+        try:
+            # Get or create user and profile
+            from django.contrib.auth.models import User
+            user, created = User.objects.get_or_create(username=student_username)
+            profile = self.get_or_create_student_profile(user)
+            
+            # Initialize DKT hidden state if needed
+            if not profile.dkt_hidden_state:
+                initial_state = DKTState(
+                    student_id=str(user.id),
+                    hidden_state=[0.0] * self.model.hidden_dim,
+                    skill_predictions=[0.5] * len(self.DEFAULT_SKILLS),
+                    interaction_sequence=[],
+                    skill_mapping=self.skill_to_index,
+                    last_updated=timezone.now().isoformat(),
+                    confidence=0.5
+                )
+                profile.dkt_hidden_state = initial_state.to_dict()
+                profile.save()
+            
+            logger.info(f"✅ DKT initialized for {student_username} in {subject}")
+            
+            return {
+                'success': True,
+                'student_username': student_username,
+                'subject': subject,
+                'hidden_state_dim': len(profile.dkt_hidden_state.get('hidden_state', [])),
+                'message': f'DKT state initialized for {student_username}'
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize DKT for {student_username}: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'message': f'DKT initialization failed for {student_username}'
+            }

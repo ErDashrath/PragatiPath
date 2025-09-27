@@ -6,10 +6,10 @@ from django.utils import timezone
 # Import user session models (legacy)
 from .user_session_models import UserSession, UserQuestionHistory, UserSubjectProgress, UserDailyStats
 
-# Import improved multi-student models
+# Import improved multi-student models with enhanced mastery tracking
 from .improved_models import (
     Subject, Chapter, StudentSession, QuestionAttempt, 
-    StudentProgress, DailyStudyStats
+    StudentProgress, DailyStudyStats, StudentMastery
 )
 
 class AdaptiveQuestion(models.Model):

@@ -38,6 +38,14 @@ SESSION_STATUS_CHOICES = [
     ('ABANDONED', 'Abandoned Session'),
 ]
 
+MASTERY_LEVEL_CHOICES = [
+    ('novice', 'Novice (0-30%)'),
+    ('developing', 'Developing (30-50%)'),
+    ('proficient', 'Proficient (50-70%)'),
+    ('advanced', 'Advanced (70-85%)'),
+    ('expert', 'Expert (85-100%)'),
+]
+
 ANSWER_STATUS_CHOICES = [
     ('CORRECT', 'Correct Answer'),
     ('INCORRECT', 'Incorrect Answer'),
@@ -97,6 +105,148 @@ class Chapter(models.Model):
             models.Index(fields=['subject', 'chapter_number']),
             models.Index(fields=['is_active']),
         ]
+
+
+class StudentMastery(models.Model):
+    """
+    Tracks student mastery progression for subjects and chapters
+    Used for adaptive learning analytics and reporting
+    """
+    id = models.AutoField(primary_key=True)
+    
+    # Foreign Key Relationships (for analytics and reporting)
+    student_session = models.ForeignKey(
+        'StudentSession',
+        on_delete=models.CASCADE,
+        related_name='mastery_records',
+        help_text="Session associated with this mastery record"
+    )
+    subject = models.ForeignKey(
+        Subject,
+        on_delete=models.CASCADE,
+        related_name='student_masteries',
+        help_text="Subject for mastery tracking"
+    )
+    chapter = models.ForeignKey(
+        Chapter,
+        on_delete=models.CASCADE,
+        related_name='student_masteries',
+        help_text="Chapter for mastery tracking"
+    )
+    
+    # Mastery Metrics
+    mastery_score = models.FloatField(
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Current mastery score (0.0 to 1.0)"
+    )
+    mastery_level = models.CharField(
+        max_length=20,
+        choices=MASTERY_LEVEL_CHOICES,
+        default='novice',
+        help_text="Categorized mastery level"
+    )
+    confidence_score = models.FloatField(
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Confidence in mastery assessment"
+    )
+    
+    # BKT Specific Metrics
+    bkt_knowledge_probability = models.FloatField(
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="BKT knowledge probability"
+    )
+    bkt_learning_rate = models.FloatField(
+        default=0.1,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="BKT learning rate parameter"
+    )
+    bkt_guess_rate = models.FloatField(
+        default=0.2,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="BKT guess rate parameter"
+    )
+    bkt_slip_rate = models.FloatField(
+        default=0.1,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="BKT slip rate parameter"
+    )
+    
+    # DKT Specific Metrics
+    dkt_knowledge_state = models.JSONField(
+        default=dict,
+        help_text="DKT knowledge state vector"
+    )
+    dkt_prediction_confidence = models.FloatField(
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="DKT prediction confidence"
+    )
+    
+    # Analytics Fields
+    questions_attempted = models.PositiveIntegerField(
+        default=0,
+        help_text="Total questions attempted in this context"
+    )
+    questions_correct = models.PositiveIntegerField(
+        default=0,
+        help_text="Total questions answered correctly"
+    )
+    average_response_time = models.FloatField(
+        default=0.0,
+        help_text="Average response time in seconds"
+    )
+    difficulty_progression = models.JSONField(
+        default=list,
+        help_text="Track of difficulty levels attempted"
+    )
+    
+    # Timestamps
+    first_assessment = models.DateTimeField(auto_now_add=True)
+    last_updated = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        unique_together = ['student_session', 'subject', 'chapter']
+        indexes = [
+            models.Index(fields=['student_session', 'subject']),
+            models.Index(fields=['subject', 'mastery_level']),
+            models.Index(fields=['mastery_score']),
+            models.Index(fields=['last_updated']),
+        ]
+        verbose_name = "Student Mastery"
+        verbose_name_plural = "Student Masteries"
+    
+    def __str__(self):
+        return f"{self.student_session.user.username} - {self.subject.name}/{self.chapter.name} - {self.mastery_level}"
+    
+    @property
+    def accuracy_rate(self):
+        """Calculate accuracy rate"""
+        if self.questions_attempted == 0:
+            return 0.0
+        return self.questions_correct / self.questions_attempted
+    
+    @property
+    def mastery_percentage(self):
+        """Get mastery as percentage"""
+        return round(self.mastery_score * 100, 2)
+    
+    def update_mastery_level(self):
+        """Update mastery level based on score"""
+        score = self.mastery_score
+        if score >= 0.85:
+            self.mastery_level = 'expert'
+        elif score >= 0.70:
+            self.mastery_level = 'advanced'
+        elif score >= 0.50:
+            self.mastery_level = 'proficient'
+        elif score >= 0.30:
+            self.mastery_level = 'developing'
+        else:
+            self.mastery_level = 'novice'
+        self.save()
 
 
 class StudentSession(models.Model):
@@ -340,6 +490,33 @@ class StudentProgress(models.Model):
     difficulty_progression = models.JSONField(default=list, help_text="Historical difficulty progression")
     performance_trend = models.JSONField(default=list, help_text="Performance trend over time")
     
+    # Enhanced Mastery Tracking
+    current_mastery_score = models.FloatField(
+        default=0.0,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Overall session mastery score"
+    )
+    mastery_threshold = models.FloatField(
+        default=0.8,
+        validators=[MinValueValidator(0.0), MaxValueValidator(1.0)],
+        help_text="Threshold for mastery achievement"
+    )
+    mastery_achieved = models.BooleanField(
+        default=False,
+        help_text="Whether mastery has been achieved in this session"
+    )
+    mastery_achieved_at = models.DateTimeField(
+        null=True,
+        blank=True,
+        help_text="Timestamp when mastery was achieved"
+    )
+    
+    # Session Analytics (Foreign Key Support for Reports)
+    session_analytics = models.JSONField(
+        default=dict,
+        help_text="Comprehensive session analytics for reporting"
+    )
+    
     # Last Activity Tracking
     last_session_date = models.DateTimeField(null=True, blank=True)
     last_question_answered_at = models.DateTimeField(null=True, blank=True)
@@ -387,6 +564,73 @@ class StudentProgress(models.Model):
             self.learning_velocity = self.total_questions_attempted / hours
         
         self.save()
+    
+    def update_mastery_score(self, new_score, update_analytics=True):
+        """Update mastery score and check for mastery achievement"""
+        self.current_mastery_score = new_score
+        
+        # Check for mastery achievement
+        if new_score >= self.mastery_threshold and not self.mastery_achieved:
+            self.mastery_achieved = True
+            self.mastery_achieved_at = timezone.now()
+        
+        # Update session analytics
+        if update_analytics:
+            analytics = self.session_analytics or {}
+            analytics.update({
+                'mastery_progression': analytics.get('mastery_progression', []) + [
+                    {
+                        'score': new_score,
+                        'timestamp': timezone.now().isoformat(),
+                        'achieved': self.mastery_achieved
+                    }
+                ],
+                'last_mastery_update': timezone.now().isoformat()
+            })
+            self.session_analytics = analytics
+        
+        self.save()
+        return self.mastery_achieved
+    
+    def get_mastery_analytics(self):
+        """Get comprehensive mastery analytics"""
+        mastery_records = self.mastery_records.all().select_related('subject', 'chapter')
+        
+        analytics = {
+            'overall_mastery': self.current_mastery_score,
+            'mastery_achieved': self.mastery_achieved,
+            'mastery_achieved_at': self.mastery_achieved_at,
+            'subject_masteries': [],
+            'chapter_masteries': [],
+            'learning_progression': self.session_analytics.get('mastery_progression', [])
+        }
+        
+        # Subject-level mastery
+        for record in mastery_records:
+            subject_data = {
+                'subject_id': record.subject.id,
+                'subject_name': record.subject.name,
+                'mastery_score': record.mastery_score,
+                'mastery_level': record.mastery_level,
+                'confidence': record.confidence_score,
+                'questions_attempted': record.questions_attempted,
+                'accuracy': record.accuracy_rate
+            }
+            analytics['subject_masteries'].append(subject_data)
+            
+            # Chapter-level mastery
+            chapter_data = {
+                'chapter_id': record.chapter.id,
+                'chapter_name': record.chapter.name,
+                'subject_name': record.subject.name,
+                'mastery_score': record.mastery_score,
+                'mastery_level': record.mastery_level,
+                'bkt_probability': record.bkt_knowledge_probability,
+                'dkt_confidence': record.dkt_prediction_confidence
+            }
+            analytics['chapter_masteries'].append(chapter_data)
+        
+        return analytics
     
     class Meta:
         db_table = 'student_progress'

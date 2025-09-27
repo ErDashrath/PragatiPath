@@ -26,6 +26,9 @@ import simple_frontend_api
 # Import enhanced history API
 import enhanced_history_api_fixed as enhanced_history_api
 
+# Import adaptive session API
+from assessment import adaptive_session_api
+
 # Import app routers
 from core.api import router as core_router
 from student_model.api import router as student_model_router
@@ -87,16 +90,34 @@ def health_check(request):
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/', api.urls),
+    
+    # Production Frontend API (Clean JSON Only)
+    path('api/', include('api.urls')),
+    
+    # Enhanced Adaptive Learning API with Mastery Tracking
+    path('api/v1/adaptive/', include('api.adaptive_urls')),
+    
     # Simple Direct Frontend API Endpoints
     path('simple/start-session/', simple_frontend_api.start_simple_session, name='start_simple_session'),
     path('simple/get-question/<str:session_id>/', simple_frontend_api.get_simple_question, name='get_simple_question'),
     path('simple/submit-answer/', simple_frontend_api.submit_simple_answer, name='submit_simple_answer'),
+    path('simple/complete-session/', simple_frontend_api.complete_session, name='complete_session'),
     path('simple/session-progress/<str:session_id>/', simple_frontend_api.get_session_progress, name='get_session_progress'),
+    path('simple/session-history/<str:student_id>/', simple_frontend_api.get_session_history, name='get_session_history'),
     path('simple/health/', simple_frontend_api.api_health, name='simple_api_health'),
     # Enhanced History API Endpoints
     path('history/student/<str:username>/', enhanced_history_api.get_student_session_history, name='student_session_history'),
     path('history/adaptive-analytics/<str:username>/', enhanced_history_api.get_adaptive_learning_analytics, name='adaptive_analytics'),
     path('history/session-details/<str:session_id>/', enhanced_history_api.get_session_details, name='session_details'),
+    
+    # Adaptive Session API Endpoints (Production-Ready BKT/DKT System)
+    path('adaptive-session/start/', adaptive_session_api.start_adaptive_session, name='start_adaptive_session'),
+    path('adaptive-session/next-question/<str:session_id>/', adaptive_session_api.get_next_question, name='get_next_question'),
+    path('adaptive-session/submit-answer/', adaptive_session_api.submit_answer, name='submit_answer'),
+    path('adaptive-session/session-summary/<str:session_id>/', adaptive_session_api.get_session_summary, name='get_session_summary'),
+    path('adaptive-session/student-mastery/<int:student_id>/', adaptive_session_api.get_student_mastery, name='get_student_mastery'),
+    path('adaptive-session/available-subjects/', adaptive_session_api.get_available_subjects, name='get_available_subjects'),
+    path('adaptive-session/end-session/<str:session_id>/', adaptive_session_api.end_session, name='end_session'),
 ]
 
 # Serve media files during development

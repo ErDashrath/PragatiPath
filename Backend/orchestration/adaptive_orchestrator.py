@@ -17,6 +17,7 @@ from core.models import StudentProfile
 from student_model.bkt import BKTService
 from student_model.dkt import DKTService
 from assessment.models import AdaptiveQuestion, QuestionAttempt
+from assessment.improved_models import Subject, Chapter, SUBJECT_CHOICES
 
 logger = logging.getLogger(__name__)
 
@@ -31,10 +32,13 @@ class AdaptiveLearningState:
     student_id: str
     user: Optional[User] = None
     
-    # Current session
-    subject: str = ""
-    skill_id: str = ""
-    difficulty_level: str = "medium"
+    # Current session - using real DB subjects and chapters
+    subject_code: str = ""  # From SUBJECT_CHOICES in DB
+    chapter_id: Optional[int] = None  # Actual Chapter ID from DB
+    subject_obj: Optional['Subject'] = None  # Subject model instance (use string for forward ref)
+    chapter_obj: Optional['Chapter'] = None  # Chapter model instance (use string for forward ref)
+    skill_id: str = ""  # Maps to subject_code + chapter context
+    difficulty_level: str = "moderate"  # From DIFFICULTY_CHOICES
     
     # Question selection
     current_question: Optional[Dict[str, Any]] = None
@@ -132,27 +136,70 @@ class AdaptiveLearningOrchestrator:
     # ========================================================================
     
     def initialize_session(self, state: AdaptiveLearningState) -> AdaptiveLearningState:
-        """Initialize the adaptive learning session"""
+        """Initialize the adaptive learning session with real DB subjects"""
         try:
             logger.info(f"🚀 Initializing adaptive session for student: {state.student_id}")
             
             # Get user object
-            student_profile = StudentProfile.objects.get(id=state.student_id)
-            state.user = student_profile.user
+            try:
+                user = User.objects.get(id=int(state.student_id))
+                state.user = user
+            except User.DoesNotExist:
+                # Try getting by StudentProfile
+                student_profile = StudentProfile.objects.get(id=state.student_id)
+                state.user = student_profile.user
             
             # Initialize tracking data
             state.iteration_count = 0
             state.session_complete = False
             
-            # Set default subject if not provided
-            if not state.subject:
-                state.subject = "mathematics"
+            # Get real subject from database
+            if state.subject_code:
+                try:
+                    state.subject_obj = Subject.objects.get(code=state.subject_code, is_active=True)
+                    logger.info(f"✅ Found subject: {state.subject_obj.name} ({state.subject_code})")
+                except Subject.DoesNotExist:
+                    logger.warning(f"⚠️ Subject {state.subject_code} not found, using default")
+                    # Use first available subject
+                    state.subject_obj = Subject.objects.filter(is_active=True).first()
+                    if state.subject_obj:
+                        state.subject_code = state.subject_obj.code
+            else:
+                # Default to first available subject
+                state.subject_obj = Subject.objects.filter(is_active=True).first()
+                if state.subject_obj:
+                    state.subject_code = state.subject_obj.code
+                else:
+                    raise Exception("No active subjects found in database")
             
-            # Set default skill if not provided  
-            if not state.skill_id:
-                state.skill_id = f"{state.subject}_basic"
+            # Get chapter if specified
+            if state.chapter_id and state.subject_obj:
+                try:
+                    state.chapter_obj = Chapter.objects.get(
+                        id=state.chapter_id, 
+                        subject=state.subject_obj,
+                        is_active=True
+                    )
+                    logger.info(f"✅ Found chapter: {state.chapter_obj.name}")
+                except Chapter.DoesNotExist:
+                    logger.warning(f"⚠️ Chapter {state.chapter_id} not found, using first chapter")
+                    state.chapter_obj = state.subject_obj.chapters.filter(is_active=True).first()
+                    if state.chapter_obj:
+                        state.chapter_id = state.chapter_obj.id
+            else:
+                # Default to first chapter of subject
+                if state.subject_obj:
+                    state.chapter_obj = state.subject_obj.chapters.filter(is_active=True).first()
+                    if state.chapter_obj:
+                        state.chapter_id = state.chapter_obj.id
             
-            logger.info(f"✅ Session initialized - Subject: {state.subject}, Skill: {state.skill_id}")
+            # Set skill_id based on real subject and chapter
+            if state.chapter_obj:
+                state.skill_id = f"{state.subject_code}_chapter_{state.chapter_obj.chapter_number}"
+            else:
+                state.skill_id = f"{state.subject_code}_general"
+            
+            logger.info(f"✅ Session initialized - Subject: {state.subject_obj.name if state.subject_obj else 'None'}, Chapter: {state.chapter_obj.name if state.chapter_obj else 'None'}, Skill: {state.skill_id}")
             
         except Exception as e:
             logger.error(f"❌ Session initialization failed: {e}")
@@ -186,7 +233,7 @@ class AdaptiveLearningOrchestrator:
         return state
     
     def select_question(self, state: AdaptiveLearningState) -> AdaptiveLearningState:
-        """Select optimal question based on knowledge analysis"""
+        """Select optimal question based on knowledge analysis from real DB"""
         try:
             logger.info(f"🎯 Selecting adaptive question for iteration {state.iteration_count + 1}")
             
@@ -197,69 +244,103 @@ class AdaptiveLearningOrchestrator:
             # Combine BKT and DKT insights (weighted average)
             combined_mastery = (bkt_mastery * 0.6) + (dkt_prediction * 0.4)
             
-            # Adaptive difficulty selection
+            # Adaptive difficulty selection using real DB difficulty choices
             if combined_mastery < 0.3:
                 target_difficulty = "easy"
-            elif combined_mastery < 0.7:
-                target_difficulty = "medium" 
+            elif combined_mastery < 0.6:
+                target_difficulty = "moderate"
+            elif combined_mastery < 0.8:
+                target_difficulty = "difficult"
             else:
-                target_difficulty = "hard"
+                target_difficulty = "difficult"  # Keep challenging for high mastery
             
             state.difficulty_level = target_difficulty
             
-            # Real question selection from database - ANY chapter of the subject
-            from assessment.improved_models import Subject, Chapter
+            # Real question selection from database using actual subjects and chapters
+            if not state.subject_obj:
+                logger.error("❌ No subject object available for question selection")
+                state.error_message = "No subject available for question selection"
+                return state
             
-            # Map subject names to match database format
-            subject_mapping = {
-                'quantitative_aptitude': 'quantitative_aptitude',
-                'logical_reasoning': 'logical_reasoning', 
-                'data_interpretation': 'data_interpretation',
-                'verbal_ability': 'verbal_ability',
-                'mathematics': 'quantitative_aptitude'  # fallback mapping
+            # Query filters
+            question_filter = {
+                'subject': state.subject_code,  # Use 'subject' field, not 'subject_code'
+                'difficulty_level': target_difficulty,  # Use 'difficulty_level' field, not 'difficulty'
+                'is_active': True
             }
             
-            db_subject = subject_mapping.get(state.subject.lower(), 'quantitative_aptitude')
+            # If specific chapter is selected, filter by chapter
+            if state.chapter_obj:
+                question_filter['chapter'] = state.chapter_obj
+                logger.info(f"🔍 Searching for {target_difficulty} questions in {state.subject_obj.name} - {state.chapter_obj.name}")
+            else:
+                # Search across all chapters of the subject
+                logger.info(f"🔍 Searching for {target_difficulty} questions across all chapters in {state.subject_obj.name}")
             
-            # Get all questions from ANY chapter of this subject with target difficulty
-            questions = AdaptiveQuestion.objects.filter(
-                subject_code=db_subject,
-                difficulty=target_difficulty
-            ).order_by('?')  # Random order for variety
+            # Get questions with the specified criteria
+            questions = AdaptiveQuestion.objects.filter(**question_filter).order_by('?')
             
             if questions.exists():
                 selected_question = questions.first()
                 state.current_question = {
                     "id": str(selected_question.id),
-                    "subject": selected_question.subject_code,
-                    "skill_id": selected_question.subject_code,
-                    "difficulty": selected_question.difficulty,
+                    "subject_code": state.subject_code,
+                    "subject_name": state.subject_obj.name,
+                    "chapter_name": selected_question.chapter.name if selected_question.chapter else "General",
+                    "chapter_id": selected_question.chapter.id if selected_question.chapter else None,
+                    "skill_id": state.skill_id,
+                    "difficulty": selected_question.difficulty_level,  # Use difficulty_level field
                     "text": selected_question.question_text,
                     "options": [
                         selected_question.option_a,
-                        selected_question.option_b,
+                        selected_question.option_b, 
                         selected_question.option_c,
                         selected_question.option_d
                     ],
-                    "correct_answer": selected_question.correct_answer,
-                    "chapter": selected_question.chapter.name if selected_question.chapter else "Mixed Topics"
+                    "correct_answer": selected_question.answer,  # Use 'answer' field, not 'correct_answer'
+                    "explanation": getattr(selected_question, 'explanation', ''),
+                    "tags": selected_question.tags,
+                    "topic": selected_question.topic
                 }
-                logger.info(f"🎲 Selected question from chapter: {state.current_question.get('chapter', 'Unknown')}")
+                logger.info(f"✅ Selected {target_difficulty} question from {state.current_question['subject_name']} - {state.current_question['chapter_name']}")
             else:
-                # Fallback to mock if no questions found
-                logger.warning(f"⚠️ No {target_difficulty} questions found for {db_subject}, using mock")
-                state.current_question = {
-                    "id": f"mock_q_{state.iteration_count + 1}_{target_difficulty}",
-                    "subject": state.subject,
-                    "skill_id": state.skill_id,
-                    "difficulty": target_difficulty,
-                    "text": f"Mock {target_difficulty} question for {state.skill_id} (No real questions available)",
-                    "options": ["Option A", "Option B", "Option C", "Option D"],
-                    "correct_answer": "a",
-                    "chapter": "Mock Chapter"
-                }
+                # Fallback: try with any difficulty in the subject/chapter
+                logger.warning(f"⚠️ No {target_difficulty} questions found, trying any difficulty...")
+                fallback_filter = {'subject': state.subject_code, 'is_active': True}  # Fix field name
+                if state.chapter_obj:
+                    fallback_filter['chapter'] = state.chapter_obj
+                    
+                questions = AdaptiveQuestion.objects.filter(**fallback_filter).order_by('?')
+                
+                if questions.exists():
+                    selected_question = questions.first()
+                    state.current_question = {
+                        "id": str(selected_question.id),
+                        "subject_code": state.subject_code,
+                        "subject_name": state.subject_obj.name,
+                        "chapter_name": selected_question.chapter.name if selected_question.chapter else "General",
+                        "chapter_id": selected_question.chapter.id if selected_question.chapter else None,
+                        "skill_id": state.skill_id,
+                        "difficulty": selected_question.difficulty_level,  # Fix field name
+                        "text": selected_question.question_text,
+                        "options": [
+                            selected_question.option_a,
+                            selected_question.option_b,
+                            selected_question.option_c, 
+                            selected_question.option_d
+                        ],
+                        "correct_answer": selected_question.answer,  # Fix field name
+                        "explanation": getattr(selected_question, 'explanation', ''),
+                        "tags": selected_question.tags,
+                        "topic": selected_question.topic
+                    }
+                    logger.info(f"✅ Selected fallback question: {selected_question.difficulty_level} from {state.current_question['subject_name']} - {state.current_question['chapter_name']}")
+                else:
+                    logger.error(f"❌ No questions found for subject {state.subject_code}")
+                    state.error_message = f"No questions available for {state.subject_obj.name}"
+                    state.session_complete = True
             
-            logger.info(f"🎲 Selected {target_difficulty} question (combined mastery: {combined_mastery:.3f})")
+            logger.info(f"🎲 Selected {state.difficulty_level} question (combined mastery: {combined_mastery:.3f})")
             
         except Exception as e:
             logger.error(f"❌ Question selection failed: {e}")
@@ -415,7 +496,7 @@ class AdaptiveLearningOrchestrator:
             
             session_summary = {
                 "student_id": state.student_id,
-                "subject": state.subject,
+                "subject": state.subject_code,  # Fix: use subject_code
                 "final_skill": state.skill_id,
                 "questions_attempted": state.iteration_count,
                 "final_bkt_mastery": bkt_mastery,
@@ -461,14 +542,15 @@ class AdaptiveLearningOrchestrator:
     # Public Interface Methods
     # ========================================================================
     
-    def run_adaptive_session(self, student_id: str, subject: str = None, 
-                           max_iterations: int = 10) -> Dict[str, Any]:
+    def run_adaptive_session(self, student_id: str, subject_code: str = None, 
+                           chapter_id: int = None, max_iterations: int = 10) -> Dict[str, Any]:
         """
         Run a complete adaptive learning session using LangGraph orchestration
         
         Args:
-            student_id: UUID of the student
-            subject: Subject area for the session
+            student_id: ID of the student (User ID)
+            subject_code: Subject code from SUBJECT_CHOICES (e.g., 'quantitative_aptitude')
+            chapter_id: Optional specific chapter ID from Chapter table
             max_iterations: Maximum number of questions/iterations
             
         Returns:
@@ -477,11 +559,44 @@ class AdaptiveLearningOrchestrator:
         
         try:
             logger.info(f"🎯 Starting LangGraph adaptive session for student: {student_id}")
+            logger.info(f"📚 Subject: {subject_code}, Chapter: {chapter_id}, Max Questions: {max_iterations}")
             
-            # Initialize state
+            # Validate subject exists in database
+            if subject_code:
+                try:
+                    subject_obj = Subject.objects.get(code=subject_code, is_active=True)
+                    logger.info(f"✅ Valid subject: {subject_obj.name}")
+                except Subject.DoesNotExist:
+                    logger.error(f"❌ Subject {subject_code} not found in database")
+                    available_subjects = list(Subject.objects.filter(is_active=True).values_list('code', 'name'))
+                    return {
+                        "success": False,
+                        "error_message": f"Subject '{subject_code}' not found",
+                        "available_subjects": available_subjects
+                    }
+            
+            # Validate chapter exists if provided
+            if chapter_id:
+                try:
+                    chapter_obj = Chapter.objects.get(id=chapter_id, is_active=True)
+                    if subject_code and chapter_obj.subject.code != subject_code:
+                        return {
+                            "success": False,
+                            "error_message": f"Chapter {chapter_id} does not belong to subject {subject_code}"
+                        }
+                    logger.info(f"✅ Valid chapter: {chapter_obj.name} (Chapter {chapter_obj.chapter_number})")
+                except Chapter.DoesNotExist:
+                    logger.error(f"❌ Chapter {chapter_id} not found")
+                    return {
+                        "success": False,
+                        "error_message": f"Chapter {chapter_id} not found"
+                    }
+            
+            # Initialize state with real database references
             initial_state = AdaptiveLearningState(
-                student_id=student_id,
-                subject=subject or "mathematics",
+                student_id=str(student_id),
+                subject_code=subject_code or 'quantitative_aptitude',  # Default to first subject
+                chapter_id=chapter_id,
                 max_iterations=max_iterations
             )
             
@@ -490,27 +605,91 @@ class AdaptiveLearningOrchestrator:
             
             # Execute workflow
             final_state = None
-            for state in app.stream(initial_state):
-                final_state = state
-                logger.debug(f"Workflow state: {list(state.keys())}")
+            try:
+                for state_dict in app.stream(initial_state):
+                    final_state = state_dict
+                    logger.debug(f"Workflow state keys: {list(state_dict.keys()) if isinstance(state_dict, dict) else 'Not a dict'}")
+                
+                # Extract final state - LangGraph returns dict with node names as keys
+                if isinstance(final_state, dict):
+                    # Get the actual state from the last node in the dict
+                    if final_state:
+                        # Try to get the state from common final nodes
+                        state_obj = None
+                        for key in ['finalize_session', 'make_adaptation_decision', 'select_question', 'initialize_session']:
+                            if key in final_state:
+                                state_obj = final_state[key]
+                                break
+                        
+                        if state_obj is None:
+                            # If no known keys, get the last value
+                            state_obj = list(final_state.values())[-1]
+                        
+                        final_state = state_obj
+                    else:
+                        raise Exception("Empty state returned from workflow")
+                
+                # Ensure final_state is an AdaptiveLearningState object
+                if not hasattr(final_state, 'subject_code'):
+                    raise Exception(f"Invalid final state type: {type(final_state)}")
+                    
+            except Exception as workflow_error:
+                logger.error(f"❌ Workflow execution failed: {workflow_error}")
+                return {
+                    "success": False,
+                    "error_message": f"Workflow execution failed: {str(workflow_error)}",
+                    "student_id": student_id
+                }
             
-            # Extract final state
-            if isinstance(final_state, dict):
-                # Get the last state from the dict
-                final_state = list(final_state.values())[-1]
+            # Get chapter statistics for context
+            chapter_stats = {}
+            if final_state.chapter_obj:
+                from django.db.models import Count
+                chapter_questions = AdaptiveQuestion.objects.filter(
+                    subject=final_state.subject_code,  # Fix field name
+                    chapter=final_state.chapter_obj,
+                    is_active=True
+                )
+                
+                # Get difficulty distribution for this chapter
+                difficulty_counts = chapter_questions.values('difficulty_level').annotate(
+                    count=Count('id')
+                )
+                chapter_stats = {
+                    'total_questions': chapter_questions.count(),
+                    'difficulty_breakdown': {item['difficulty_level']: item['count'] for item in difficulty_counts},
+                    'chapter_name': final_state.chapter_obj.name,
+                    'chapter_number': final_state.chapter_obj.chapter_number
+                }
             
-            # Build result summary
+            # Build result summary with real database context
             result = {
                 "success": not bool(final_state.error_message),
                 "student_id": student_id,
-                "subject": final_state.subject,
+                "subject": {
+                    "code": final_state.subject_code,
+                    "name": final_state.subject_obj.name if final_state.subject_obj else "Unknown",
+                    "id": final_state.subject_obj.id if final_state.subject_obj else None
+                },
+                "chapter": {
+                    "id": final_state.chapter_id,
+                    "name": final_state.chapter_obj.name if final_state.chapter_obj else None,
+                    "number": final_state.chapter_obj.chapter_number if final_state.chapter_obj else None,
+                    "stats": chapter_stats
+                } if final_state.chapter_obj else None,
                 "questions_attempted": final_state.iteration_count,
                 "final_skill": final_state.skill_id,
                 "recommendation": final_state.recommendation,
                 "session_complete": final_state.session_complete,
                 "bkt_mastery": final_state.bkt_state.get('mastery_probability', 0.5) if final_state.bkt_state else 0.5,
                 "dkt_prediction": final_state.dkt_state.get('predictions', {}).get(final_state.skill_id, 0.5) if final_state.dkt_state else 0.5,
-                "error_message": final_state.error_message
+                "final_difficulty": final_state.difficulty_level,
+                "error_message": final_state.error_message,
+                "workflow_metadata": {
+                    "max_iterations": max_iterations,
+                    "iteration_count": final_state.iteration_count,
+                    "mastery_threshold": final_state.mastery_threshold
+                }
             }
             
             logger.info(f"🎉 Adaptive session completed successfully!")

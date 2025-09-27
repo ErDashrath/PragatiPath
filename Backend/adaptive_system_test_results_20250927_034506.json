@@ -1,0 +1,416 @@
+{
+  "session_tests": [
+    {
+      "subject_code": "quantitative_aptitude",
+      "session_id": "f1241f8c-070f-4b83-941d-c70f69716cd9",
+      "initial_mastery": 0.21999999999999997,
+      "starting_difficulty": "easy",
+      "success": true
+    },
+    {
+      "subject_code": "logical_reasoning",
+      "session_id": "2b578bf1-61fc-4cd5-9cc2-3cff157c7dc8",
+      "initial_mastery": 0.21999999999999997,
+      "starting_difficulty": "easy",
+      "success": true
+    }
+  ],
+  "api_tests": [
+    {
+      "server_running": true,
+      "endpoints_tested": 3,
+      "all_passed": true
+    }
+  ],
+  "performance_metrics": {},
+  "difficulty_progression_tests": [
+    {
+      "pattern": [
+        true,
+        true,
+        true
+      ],
+      "difficulty_progression": [
+        "easy",
+        "easy",
+        "moderate"
+      ],
+      "mastery_progression": [
+        0.21999999999999997,
+        0.5233333333333333,
+        0.7702325581395348
+      ]
+    },
+    {
+      "pattern": [
+        false,
+        false,
+        false
+      ],
+      "difficulty_progression": [
+        "difficult",
+        "difficult",
+        "moderate"
+      ],
+      "mastery_progression": [
+        0.836385029770343,
+        0.7828927929726492,
+        0.6251142119850903
+      ]
+    },
+    {
+      "pattern": [
+        true,
+        false,
+        true
+      ],
+      "difficulty_progression": [
+        "easy",
+        "easy"
+      ],
+      "mastery_progression": [
+        0.46236826622108207,
+        0.7440831306175543
+      ]
+    }
+  ],
+  "mastery_tracking_tests": [
+    {
+      "initial_mastery": 0.5619544064939731,
+      "mastery_history": [
+        0.5619544064939731,
+        0.784,
+        0.839,
+        0.848,
+        0.84,
+        0.848
+      ],
+      "final_summary": {
+        "session_id": "9c70de62-5f55-4081-8c24-c5065e76f5c4",
+        "student_id": 79,
+        "subject_code": "quantitative_aptitude",
+        "total_questions": 5,
+        "questions_correct": 4,
+        "questions_incorrect": 1,
+        "accuracy_percentage": 80.0,
+        "initial_mastery": 0.562,
+        "final_mastery": 0.848,
+        "mastery_improvement": 0.287,
+        "initial_mastery_level": "proficient",
+        "final_mastery_level": "advanced",
+        "mastery_progression": [
+          0.562,
+          0.784,
+          0.839,
+          0.848,
+          0.84,
+          0.848
+        ],
+        "difficulty_progression": [
+          "moderate"
+        ],
+        "difficulty_stats": {
+          "starting_difficulty": "moderate",
+          "ending_difficulty": "moderate",
+          "difficulty_counts": {
+            "moderate": 1
+          },
+          "progression_changes": 0,
+          "highest_difficulty_reached": "moderate"
+        },
+        "performance_history": [
+          {
+            "question_number": 1,
+            "is_correct": true,
+            "mastery": 0.7841023078469476,
+            "difficulty": "moderate"
+          },
+          {
+            "question_number": 2,
+            "is_correct": true,
+            "mastery": 0.8389393941071314,
+            "difficulty": "moderate"
+          },
+          {
+            "question_number": 3,
+            "is_correct": true,
+            "mastery": 0.8482580535464322,
+            "difficulty": "difficult"
+          },
+          {
+            "question_number": 4,
+            "is_correct": false,
+            "mastery": 0.8404121156710608,
+            "difficulty": "difficult"
+          },
+          {
+            "question_number": 5,
+            "is_correct": true,
+            "mastery": 0.8484924915301272,
+            "difficulty": "difficult"
+          }
+        ],
+        "recommendations": [
+          "Strong understanding demonstrated. Practice more difficult questions.",
+          "Focus on speed and accuracy with challenging problems.",
+          "Review incorrect answers and understand the concepts."
+        ],
+        "session_duration": {
+          "total_seconds": 0,
+          "total_minutes": 0,
+          "average_time_per_question": 0
+        },
+        "session_complete": false
+      }
+    }
+  ],
+  "database_analysis": {
+    "subjects_count": 4,
+    "total_questions": 552,
+    "difficulty_distribution": {
+      "very_easy": 69,
+      "easy": 217,
+      "moderate": 186,
+      "difficult": 78
+    }
+  },
+  "complete_session": {
+    "questions": [],
+    "performance_history": [
+      {
+        "question": 1,
+        "correct": false,
+        "mastery": 0.842,
+        "difficulty": "difficult"
+      },
+      {
+        "question": 2,
+        "correct": false,
+        "mastery": 0.807,
+        "difficulty": "difficult"
+      },
+      {
+        "question": 3,
+        "correct": true,
+        "mastery": 0.843,
+        "difficulty": "moderate"
+      },
+      {
+        "question": 4,
+        "correct": false,
+        "mastery": 0.813,
+        "difficulty": "moderate"
+      },
+      {
+        "question": 5,
+        "correct": true,
+        "mastery": 0.844,
+        "difficulty": "moderate"
+      },
+      {
+        "question": 6,
+        "correct": true,
+        "mastery": 0.849,
+        "difficulty": "moderate"
+      },
+      {
+        "question": 7,
+        "correct": true,
+        "mastery": 0.85,
+        "difficulty": "difficult"
+      },
+      {
+        "question": 8,
+        "correct": true,
+        "mastery": 0.85,
+        "difficulty": "difficult"
+      },
+      {
+        "question": 9,
+        "correct": true,
+        "mastery": 0.85,
+        "difficulty": "difficult"
+      },
+      {
+        "question": 10,
+        "correct": true,
+        "mastery": 0.85,
+        "difficulty": "difficult"
+      },
+      {
+        "question": 11,
+        "correct": true,
+        "mastery": 0.85,
+        "difficulty": "difficult"
+      },
+      {
+        "question": 12,
+        "correct": true,
+        "mastery": 0.85,
+        "difficulty": "difficult"
+      }
+    ],
+    "difficulty_changes": [
+      {
+        "question": 2,
+        "from": "difficult",
+        "to": "moderate"
+      },
+      {
+        "question": 3,
+        "from": "moderate",
+        "to": "moderate"
+      },
+      {
+        "question": 4,
+        "from": "moderate",
+        "to": "moderate"
+      },
+      {
+        "question": 5,
+        "from": "moderate",
+        "to": "moderate"
+      }
+    ],
+    "mastery_progression": [
+      0.842,
+      0.807,
+      0.843,
+      0.813,
+      0.844,
+      0.849,
+      0.85,
+      0.85,
+      0.85,
+      0.85,
+      0.85,
+      0.85
+    ],
+    "final_summary": {
+      "session_id": "76e03501-dff8-4546-bbfa-42dea493a884",
+      "student_id": 79,
+      "subject_code": "quantitative_aptitude",
+      "total_questions": 12,
+      "questions_correct": 9,
+      "questions_incorrect": 3,
+      "accuracy_percentage": 75.0,
+      "initial_mastery": 0.848,
+      "final_mastery": 0.85,
+      "mastery_improvement": 0.002,
+      "initial_mastery_level": "advanced",
+      "final_mastery_level": "advanced",
+      "mastery_progression": [
+        0.848,
+        0.842,
+        0.807,
+        0.843,
+        0.813,
+        0.844,
+        0.849,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85,
+        0.85
+      ],
+      "difficulty_progression": [
+        "difficult"
+      ],
+      "difficulty_stats": {
+        "starting_difficulty": "difficult",
+        "ending_difficulty": "difficult",
+        "difficulty_counts": {
+          "difficult": 1
+        },
+        "progression_changes": 0,
+        "highest_difficulty_reached": "difficult"
+      },
+      "performance_history": [
+        {
+          "question_number": 1,
+          "is_correct": false,
+          "mastery": 0.8416833271168377,
+          "difficulty": "difficult"
+        },
+        {
+          "question_number": 2,
+          "is_correct": false,
+          "mastery": 0.8070025861153011,
+          "difficulty": "difficult"
+        },
+        {
+          "question_number": 3,
+          "is_correct": true,
+          "mastery": 0.8429759395812979,
+          "difficulty": "moderate"
+        },
+        {
+          "question_number": 4,
+          "is_correct": false,
+          "mastery": 0.8132468267501293,
+          "difficulty": "moderate"
+        },
+        {
+          "question_number": 5,
+          "is_correct": true,
+          "mastery": 0.8440394287062103,
+          "difficulty": "moderate"
+        },
+        {
+          "question_number": 6,
+          "is_correct": true,
+          "mastery": 0.8490666183678967,
+          "difficulty": "moderate"
+        },
+        {
+          "question_number": 7,
+          "is_correct": true,
+          "mastery": 0.84985465656735,
+          "difficulty": "difficult"
+        },
+        {
+          "question_number": 8,
+          "is_correct": true,
+          "mastery": 0.849977387369813,
+          "difficulty": "difficult"
+        },
+        {
+          "question_number": 9,
+          "is_correct": true,
+          "mastery": 0.8499964823913683,
+          "difficulty": "difficult"
+        },
+        {
+          "question_number": 10,
+          "is_correct": true,
+          "mastery": 0.8499994528142963,
+          "difficulty": "difficult"
+        },
+        {
+          "question_number": 11,
+          "is_correct": true,
+          "mastery": 0.8499999148821721,
+          "difficulty": "difficult"
+        },
+        {
+          "question_number": 12,
+          "is_correct": true,
+          "mastery": 0.8499999867594478,
+          "difficulty": "difficult"
+        }
+      ],
+      "recommendations": [
+        "Strong understanding demonstrated. Practice more difficult questions.",
+        "Focus on speed and accuracy with challenging problems.",
+        "Review incorrect answers and understand the concepts."
+      ],
+      "session_duration": {
+        "total_seconds": 0,
+        "total_minutes": 0,
+        "average_time_per_question": 0
+      },
+      "session_complete": false
+    }
+  }
+}

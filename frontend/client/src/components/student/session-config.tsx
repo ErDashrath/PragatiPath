@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Clock, Brain, Target, Settings, Globe } from "lucide-react";
+import { Clock, Target, Settings, Globe } from "lucide-react";
 import { IndianTimeUtils, useISTTime } from "@/lib/indian-time-utils";
 
 interface SessionConfigProps {
@@ -35,13 +35,6 @@ const TIME_OPTIONS = [
   { value: 1800, label: "30 Minutes", description: "Maximum time" }
 ];
 
-const DIFFICULTY_OPTIONS = [
-  { value: 'easy', label: "Easy", description: "Basic concepts", icon: "🟢" },
-  { value: 'medium', label: "Medium", description: "Moderate difficulty", icon: "🟡" },
-  { value: 'hard', label: "Hard", description: "Advanced level", icon: "🔴" },
-  { value: 'adaptive', label: "Adaptive", description: "AI adjusts difficulty", icon: "🧠" }
-];
-
 export default function SessionConfig({ 
   title, 
   description, 
@@ -50,14 +43,13 @@ export default function SessionConfig({
 }: SessionConfigProps) {
   const [questionCount, setQuestionCount] = useState(15);
   const [timeLimit, setTimeLimit] = useState(600);
-  const [difficulty, setDifficulty] = useState<SessionConfig['difficulty']>('medium');
   const currentISTTime = useISTTime();
 
   const handleStartSession = () => {
     onStartSession({
       questionCount,
       timeLimit,
-      difficulty,
+      difficulty: 'adaptive', // Always use adaptive for best experience
       startTime: IndianTimeUtils.getSessionStartTime()
     });
   };
@@ -67,24 +59,20 @@ export default function SessionConfig({
     return minutes === 1 ? "1 minute" : `${minutes} minutes`;
   };
 
-  const selectedQuestionOption = QUESTION_OPTIONS.find(opt => opt.value === questionCount);
-  const selectedTimeOption = TIME_OPTIONS.find(opt => opt.value === timeLimit);
-  const selectedDifficultyOption = DIFFICULTY_OPTIONS.find(opt => opt.value === difficulty);
-
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] p-4">
-      <Card className="w-full max-w-2xl">
-        <CardHeader className="text-center">
+      <Card className="w-full max-w-lg">
+        <CardHeader className="text-center pb-4">
           <div className="flex items-center justify-center mb-2">
-            <Settings className="h-8 w-8 text-primary mr-2" />
+            <Settings className="h-6 w-6 text-primary mr-2" />
           </div>
-          <CardTitle className="text-2xl">{title}</CardTitle>
-          <p className="text-muted-foreground">{description}</p>
+          <CardTitle className="text-xl">{title}</CardTitle>
+          <p className="text-sm text-muted-foreground">{description}</p>
           
           {/* Current IST Time Display */}
-          <div className="mt-4 p-3 bg-muted/50 rounded-lg">
-            <div className="flex items-center justify-center gap-2 text-sm">
-              <Globe className="h-4 w-4 text-primary" />
+          <div className="mt-3 p-2 bg-muted/50 rounded-lg">
+            <div className="flex items-center justify-center gap-2 text-xs">
+              <Globe className="h-3 w-3 text-primary" />
               <span className="font-medium">Current Time (IST):</span>
               <span className="text-primary font-mono">{currentISTTime}</span>
             </div>
@@ -94,128 +82,81 @@ export default function SessionConfig({
           </div>
         </CardHeader>
         
-        <CardContent className="space-y-6">
+        <CardContent className="space-y-4">
           {/* Question Count Selection */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <Target className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold">Number of Questions</h3>
+              <Target className="h-4 w-4 text-primary" />
+              <h3 className="font-medium text-sm">Number of Questions</h3>
             </div>
             <Select value={questionCount.toString()} onValueChange={(value) => setQuestionCount(Number(value))}>
-              <SelectTrigger>
+              <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {QUESTION_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value.toString()}>
                     <div className="flex flex-col">
-                      <span className="font-medium">{option.label}</span>
+                      <span className="font-medium text-sm">{option.label}</span>
                       <span className="text-xs text-muted-foreground">{option.description}</span>
                     </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {selectedQuestionOption && (
-              <p className="text-sm text-muted-foreground">
-                {selectedQuestionOption.description}
-              </p>
-            )}
           </div>
 
           {/* Time Limit Selection */}
-          <div className="space-y-3">
+          <div className="space-y-2">
             <div className="flex items-center gap-2">
-              <Clock className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold">Time Limit</h3>
+              <Clock className="h-4 w-4 text-primary" />
+              <h3 className="font-medium text-sm">Time Limit</h3>
             </div>
             <Select value={timeLimit.toString()} onValueChange={(value) => setTimeLimit(Number(value))}>
-              <SelectTrigger>
+              <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 {TIME_OPTIONS.map((option) => (
                   <SelectItem key={option.value} value={option.value.toString()}>
                     <div className="flex flex-col">
-                      <span className="font-medium">{option.label}</span>
+                      <span className="font-medium text-sm">{option.label}</span>
                       <span className="text-xs text-muted-foreground">{option.description}</span>
                     </div>
                   </SelectItem>
                 ))}
               </SelectContent>
             </Select>
-            {selectedTimeOption && (
-              <p className="text-sm text-muted-foreground">
-                {selectedTimeOption.description}
-              </p>
-            )}
-          </div>
-
-          {/* Difficulty Selection */}
-          <div className="space-y-3">
-            <div className="flex items-center gap-2">
-              <Brain className="h-5 w-5 text-primary" />
-              <h3 className="font-semibold">Difficulty Level</h3>
-            </div>
-            <Select value={difficulty} onValueChange={(value) => setDifficulty(value as SessionConfig['difficulty'])}>
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {DIFFICULTY_OPTIONS.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>
-                    <div className="flex items-center gap-2">
-                      <span>{option.icon}</span>
-                      <div className="flex flex-col">
-                        <span className="font-medium">{option.label}</span>
-                        <span className="text-xs text-muted-foreground">{option.description}</span>
-                      </div>
-                    </div>
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {selectedDifficultyOption && (
-              <p className="text-sm text-muted-foreground">
-                {selectedDifficultyOption.description}
-              </p>
-            )}
           </div>
 
           {/* Summary Card */}
           <Card className="bg-muted/50">
-            <CardContent className="pt-4">
-              <h4 className="font-semibold mb-3 flex items-center gap-2">
-                <Settings className="h-4 w-4" />
+            <CardContent className="pt-3 pb-3">
+              <h4 className="font-medium mb-2 flex items-center gap-2 text-sm">
+                <Settings className="h-3 w-3" />
                 Session Summary
               </h4>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+              <div className="grid grid-cols-2 gap-3 text-xs">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Questions:</span>
-                  <Badge variant="secondary">{questionCount}</Badge>
+                  <Badge variant="secondary" className="text-xs">{questionCount}</Badge>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Time Limit:</span>
-                  <Badge variant="secondary">{formatTime(timeLimit)}</Badge>
-                </div>
-                <div className="flex items-center justify-between">
-                  <span className="text-muted-foreground">Difficulty:</span>
-                  <Badge variant="outline" className="capitalize">
-                    {selectedDifficultyOption?.icon} {difficulty}
-                  </Badge>
+                  <Badge variant="secondary" className="text-xs">{formatTime(timeLimit)}</Badge>
                 </div>
               </div>
             </CardContent>
           </Card>
 
           {/* Action Buttons */}
-          <div className="flex gap-3 pt-4">
+          <div className="flex gap-2 pt-2">
             {onCancel && (
-              <Button variant="outline" onClick={onCancel} className="flex-1">
+              <Button variant="outline" onClick={onCancel} className="flex-1 h-8 text-sm">
                 Cancel
               </Button>
             )}
-            <Button onClick={handleStartSession} className="flex-1">
+            <Button onClick={handleStartSession} className="flex-1 h-8 text-sm">
               Start Session
             </Button>
           </div>

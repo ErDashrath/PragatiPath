@@ -34,14 +34,17 @@ from student_model.dkt import DKTService
 
 logger = logging.getLogger(__name__)
 
-# Try to import orchestration service (may not exist yet)
+# Import orchestration service for full adaptive learning
 try:
-    from assessment.orchestration_service import OrchestrationService
+    from orchestration.orchestration_service import OrchestrationService
+    from orchestration.adaptive_orchestrator import adaptive_orchestrator
     orchestration_service = OrchestrationService()
     ORCHESTRATION_AVAILABLE = True
+    print("🧠 Orchestration service loaded successfully!")
 except ImportError as e:
     orchestration_service = None
     ORCHESTRATION_AVAILABLE = False
+    print(f"⚠️ Orchestration service not available: {e}")
 
 # Initialize services
 bkt_service = BKTService()
@@ -128,29 +131,53 @@ def start_simple_session(request):
             }
         )
         
-        # Create simple session
+        # Create simple session with required fields only
         session = StudentSession.objects.create(
             student=user,
             subject=subject_obj,
-            session_name=f"Simple {subject_obj.name} Session",
+            session_name=f"Adaptive {subject_obj.name} Session",  # Enhanced name
+            session_type='PRACTICE',  # Set session type
+            status='ACTIVE',  # Set status
             total_questions_planned=question_count,  # Use the provided question count
+            current_difficulty_level='moderate',  # Default difficulty
+            difficulty_adjustments=[],  # Empty list
+            question_sequence=[],  # Empty array
+            device_info={},  # Empty dict
+            user_agent=request.META.get('HTTP_USER_AGENT', ''),  # Set user agent
             session_config={
                 'subject': subject,
                 'subject_code': subject_code,
                 'subject_name': subject_obj.name,
                 'frontend_session': True,
-                'simple_api': True,
+                'orchestration_enabled': ORCHESTRATION_AVAILABLE,  # Flag orchestration
+                'adaptive_api': True,
                 'question_count': question_count  # Store in config for reference
             }
         )
+        
+        # Initialize orchestration if available
+        if ORCHESTRATION_AVAILABLE and orchestration_service:
+            try:
+                # Initialize student's adaptive learning state with orchestration
+                orchestration_result = orchestration_service.initialize_student_session(
+                    student_username=user.username,
+                    subject=subject
+                )
+                print(f"🎯 Orchestration initialized: {orchestration_result}")
+                
+            except Exception as e:
+                print(f"⚠️ Orchestration initialization failed: {e}")
+                # Continue without orchestration
         
         return JsonResponse({
             'success': True,
             'message': 'Session started successfully!',
             'session_id': str(session.id),
-            'student_id': str(profile.id),
+            'student_id': str(profile.id),  # StudentProfile UUID for legacy compatibility
+            'user_id': user.id,  # User integer ID for session history
             'student_name': student_name,
             'subject': subject,
+            'orchestration_enabled': ORCHESTRATION_AVAILABLE,
             'next_action': 'Click "Get Question" to start learning!'
         })
         
@@ -171,6 +198,8 @@ def get_simple_question(request, session_id):
     Frontend can call this immediately:
     GET /get-question/<session_id>/
     """
+    print(f"🔍 DEBUG - get_simple_question called with session_id: {session_id}")
+    
     try:
         if not session_id:
             return JsonResponse({
@@ -181,6 +210,7 @@ def get_simple_question(request, session_id):
         
         session = get_object_or_404(StudentSession, id=session_id)
         subject = session.session_config.get('subject', 'mathematics')
+        print(f"🔍 DEBUG - Found session for subject: {subject}")
         
         # Count current questions
         question_count = QuestionAttempt.objects.filter(session=session).count() + 1
@@ -198,55 +228,111 @@ def get_simple_question(request, session_id):
                 }
             }, status=200)
         
-        # Get current knowledge state for adaptive difficulty using orchestration
-        skill_id = f"{subject}_skill_{question_count}"
+        # Get advanced knowledge state for adaptive difficulty using full orchestration
+        skill_id = f"{subject}_skill"  # FIXED: Use consistent skill_id format
+        
+        print(f"🔍 DEBUG - Checking orchestration availability: {ORCHESTRATION_AVAILABLE}")
+        print(f"🔍 DEBUG - Orchestration service object: {orchestration_service}")
         
         try:
-            # Try to get BKT mastery with orchestration integration
-            from orchestration.orchestration_service import orchestration_service
-            from student_model.bkt import BKTService
-            from student_model.dkt import DKTService
-            
-            # Get orchestrated knowledge state
-            orchestration_result = orchestration_service.get_comprehensive_knowledge_state(
-                student=session.student,
-                subject=subject,
-                skill_id=skill_id
-            )
-            
-            # Extract mastery from orchestration result
-            if orchestration_result and 'bkt_state' in orchestration_result:
-                bkt_data = orchestration_result['bkt_state'].get(skill_id, {})
-                mastery_level = bkt_data.get('P_L', 0.5)
-                print(f"🧠 Orchestration BKT mastery for {skill_id}: {mastery_level:.3f}")
-            else:
-                # Fallback to direct BKT service
-                bkt_params = bkt_service.get_skill_bkt_params(session.student, skill_id)
-                mastery_level = bkt_params.P_L if bkt_params else 0.5
-                print(f"🔄 Fallback BKT mastery for {skill_id}: {mastery_level:.3f}")
+            if ORCHESTRATION_AVAILABLE and orchestration_service:
+                print(f"🎯 Getting orchestrated knowledge state for {session.student.username}, skill: {skill_id}")
                 
-        except Exception as e:
-            print(f"⚠️ Orchestration failed, using fallback BKT: {e}")
-            try:
+                orchestration_result = orchestration_service.get_comprehensive_knowledge_state(
+                    student_username=session.student.username,
+                    subject=subject
+                )
+                
+                print(f"🔍 DEBUG - Orchestration result: {orchestration_result}")
+                
+                if orchestration_result and orchestration_result.get('success'):
+                    mastery_level = orchestration_result.get('bkt_mastery', 0.5)
+                    dkt_prediction = orchestration_result.get('dkt_prediction', 0.5)
+                    combined_confidence = orchestration_result.get('combined_confidence', 0.5)
+                    
+                    print(f"📊 Orchestrated State - BKT: {mastery_level:.3f}, DKT: {dkt_prediction:.3f}, Combined: {combined_confidence:.3f}")
+                    
+                    # ENHANCED DIFFICULTY ADAPTATION - Check recent performance pattern
+                    recent_attempts = QuestionAttempt.objects.filter(
+                        session=session
+                    ).order_by('-created_at')[:3]  # Last 3 attempts
+                    
+                    recent_performance = []
+                    for attempt in recent_attempts:
+                        recent_performance.append(1 if attempt.is_correct else 0)
+                    
+                    print(f"📊 Recent performance: {recent_performance}")
+                    
+                    # Use combined confidence for base adaptive difficulty
+                    adaptive_confidence = combined_confidence
+                    
+                    # Adjust confidence based on recent performance trend
+                    if len(recent_performance) >= 2:
+                        recent_success_rate = sum(recent_performance) / len(recent_performance)
+                        print(f"📈 Recent success rate: {recent_success_rate:.2f}")
+                        
+                        # Dynamic difficulty adjustment based on performance trend
+                        if recent_success_rate == 0.0:  # All recent answers wrong
+                            adaptive_confidence = max(0.05, adaptive_confidence * 0.6)
+                            print(f"📉 All recent wrong - reducing confidence to {adaptive_confidence:.3f}")
+                        elif recent_success_rate == 1.0:  # All recent answers correct
+                            adaptive_confidence = min(0.95, adaptive_confidence * 1.4)
+                            print(f"📈 All recent correct - boosting confidence to {adaptive_confidence:.3f}")
+                        elif recent_success_rate < 0.4:  # Mostly wrong
+                            adaptive_confidence = max(0.1, adaptive_confidence * 0.75)
+                            print(f"📉 Mostly wrong - reducing confidence to {adaptive_confidence:.3f}")
+                        elif recent_success_rate > 0.7:  # Mostly correct
+                            adaptive_confidence = min(0.9, adaptive_confidence * 1.25)
+                            print(f"📈 Mostly correct - boosting confidence to {adaptive_confidence:.3f}")
+                    
+                    print(f"🎯 Final adaptive confidence: {adaptive_confidence:.3f}")
+                else:
+                    print("⚠️ Orchestration returned empty result, using fallback")
+                    adaptive_confidence = 0.5
+                    
+            else:
+                print("⚠️ Orchestration not available, using basic BKT")
                 # Fallback to basic BKT
                 bkt_params = bkt_service.get_skill_bkt_params(session.student, skill_id)
-                mastery_level = bkt_params.P_L if bkt_params else 0.5
-            except:
-                mastery_level = 0.5
+                adaptive_confidence = bkt_params.P_L if bkt_params else 0.5
+                
+        except Exception as e:
+            print(f"⚠️ Orchestration failed: {e}, using fallback")
+            adaptive_confidence = 0.5
         
-        # Map adaptive difficulty to database difficulty
-        if mastery_level < 0.3:
+        # Map orchestrated adaptive confidence to database difficulty - COMPLETE MAPPING INCLUDING VERY_EASY
+        if adaptive_confidence < 0.15:  # Very low mastery - use very_easy questions
+            difficulty = "very_easy"
+            db_difficulty = "very_easy"
+            difficulty_emoji = "�"
+            adaptive_reason = f"Very easy questions to build basic confidence (mastery: {adaptive_confidence:.1%})"
+        elif adaptive_confidence < 0.35:  # Low mastery - use easy questions
             difficulty = "easy"
             db_difficulty = "easy"
-            difficulty_emoji = "🟢"
-        elif mastery_level < 0.7:
-            difficulty = "medium" 
+            difficulty_emoji = "�"
+            adaptive_reason = f"Easy questions to build confidence (mastery: {adaptive_confidence:.1%})"
+        elif adaptive_confidence < 0.55:  # Medium-low mastery - use moderate questions
+            difficulty = "moderate" 
             db_difficulty = "moderate"
             difficulty_emoji = "🟡"
-        else:
-            difficulty = "hard"
+            adaptive_reason = f"Moderate questions for skill building (mastery: {adaptive_confidence:.1%})"
+        elif adaptive_confidence < 0.75:  # Medium-high mastery - stay at moderate
+            difficulty = "moderate"
+            db_difficulty = "moderate"
+            difficulty_emoji = "🟡"
+            adaptive_reason = f"Moderate questions for steady progress (mastery: {adaptive_confidence:.1%})"
+        elif adaptive_confidence < 0.9:  # High mastery - use difficult questions
+            difficulty = "difficult"
             db_difficulty = "difficult"
             difficulty_emoji = "🔴"
+            adaptive_reason = f"Difficult questions for advanced growth (mastery: {adaptive_confidence:.1%})"
+        else:  # Very high mastery - use most difficult questions
+            difficulty = "difficult"
+            db_difficulty = "difficult"  
+            difficulty_emoji = "🔥"
+            adaptive_reason = f"Advanced difficult questions (mastery: {adaptive_confidence:.1%})"
+        
+        print(f"🎯 Adaptive mapping: confidence {adaptive_confidence:.3f} → {difficulty} difficulty")
         
         # Get real questions from database
         from assessment.improved_models import Subject
@@ -290,13 +376,16 @@ def get_simple_question(request, session_id):
                     {'id': 'D', 'text': real_question.option_d}
                 ],
                 'correct_answer': real_question.answer.upper(),
-                'explanation': f'This {difficulty} {subject_obj.name} question was selected based on your mastery level of {mastery_level:.1%}',
+                'explanation': f'This {difficulty} {subject_obj.name} question was selected based on your confidence level of {adaptive_confidence:.1%}',
                 'topic': getattr(real_question, 'tags', '').split(',')[0] if getattr(real_question, 'tags', '') else 'General',
                 'subtopic': real_question.question_type,
                 'adaptive_info': {
-                    'mastery_level': mastery_level,
+                    'mastery_level': adaptive_confidence,
                     'skill_id': skill_id,
-                    'adaptive_reason': f"Selected {difficulty} difficulty because mastery is {mastery_level:.1%}",
+                    'adaptive_reason': adaptive_reason,
+                    'orchestration_enabled': ORCHESTRATION_AVAILABLE,
+                    'bkt_mastery': orchestration_result.get('bkt_mastery', 0.5) if ORCHESTRATION_AVAILABLE and 'orchestration_result' in locals() else adaptive_confidence,
+                    'dkt_prediction': orchestration_result.get('dkt_prediction', 0.5) if ORCHESTRATION_AVAILABLE and 'orchestration_result' in locals() else 0.5,
                     'real_question': True
                 },
             }
@@ -313,7 +402,7 @@ def get_simple_question(request, session_id):
                 'subject_display': subject_obj.name if subject_obj else subject.title(),
                 'difficulty': difficulty,
                 'difficulty_display': f"{difficulty_emoji} {difficulty.upper()}",
-                'question_text': f"Question {question_count}: This is a {difficulty} {subject} question adapted to your current mastery level ({mastery_level:.1%}).",
+                'question_text': f"Question {question_count}: This is a {difficulty} {subject} question adapted to your current confidence level ({adaptive_confidence:.1%}).",
                 'options': [
                     {'id': 'A', 'text': f'Option A - {difficulty} level answer'},
                     {'id': 'B', 'text': f'Option B - {difficulty} level answer'},
@@ -321,11 +410,12 @@ def get_simple_question(request, session_id):
                     {'id': 'D', 'text': f'Option D - {difficulty} level answer'}
                 ],
                 'correct_answer': 'A',
-                'explanation': f'This {difficulty} question was selected based on your mastery level of {mastery_level:.1%}',
+                'explanation': f'This {difficulty} {subject_obj.name} question was selected based on your confidence level of {adaptive_confidence:.1%}',
                 'adaptive_info': {
-                    'mastery_level': mastery_level,
+                    'mastery_level': adaptive_confidence,
                     'skill_id': skill_id,
-                    'adaptive_reason': f"Selected {difficulty} difficulty because mastery is {mastery_level:.1%}",
+                    'adaptive_reason': adaptive_reason,
+                    'orchestration_enabled': ORCHESTRATION_AVAILABLE,
                     'real_question': False
                 },
             'message': f'📚 Adaptive question ready! Difficulty: {difficulty_emoji} {difficulty.upper()}',
@@ -477,6 +567,7 @@ def submit_simple_answer(request):
         # Determine correct answer based on question type
         is_correct = (selected_answer.upper() == correct_answer.upper())
         
+        # Create question attempt record
         attempt = QuestionAttempt.objects.create(
             session=session,
             question=question_for_attempt,
@@ -495,11 +586,11 @@ def submit_simple_answer(request):
             }
         )
         
-        # Get knowledge state before updates using ORCHESTRATION
-        skill_id = f"{subject}_skill_{QuestionAttempt.objects.filter(session=session).count()}"
+        # Calculate skill_id and session accuracy for orchestration - FIXED: Use consistent format
+        skill_id = f"{subject}_skill"
         
         # Get session accuracy before this submission
-        previous_attempts = QuestionAttempt.objects.filter(session=session)
+        previous_attempts = QuestionAttempt.objects.filter(session=session).exclude(id=attempt.id)
         if previous_attempts.exists():
             correct_before = previous_attempts.filter(is_correct=True).count()
             total_before = previous_attempts.count()
@@ -507,37 +598,41 @@ def submit_simple_answer(request):
         else:
             session_accuracy_before = 0.0
 
-        # Get knowledge state before submission using ORCHESTRATION
+        # Get knowledge state before submission using FULL ORCHESTRATION
         bkt_mastery_before = 0.5
         dkt_prediction_before = 0.5
         bkt_params_before = {'P_L': 0.5, 'P_T': 0.3, 'P_G': 0.2, 'P_S': 0.1}
         
         try:
-            logger.info(f"🎯 Getting pre-submission knowledge state via orchestration for student {session.student.username}, skill {skill_id}")
-            
-            orchestration_result = orchestration_service.get_comprehensive_knowledge_state(
-                student=session.student,
-                subject=session.subject,
-                skill_id=skill_id
-            )
-            
-            if orchestration_result and 'bkt' in orchestration_result:
-                bkt_data = orchestration_result['bkt']
-                if 'mastery' in bkt_data:
-                    bkt_mastery_before = float(bkt_data['mastery'])
-                if 'params' in bkt_data:
-                    bkt_params_before = bkt_data['params']
-                logger.info(f"📊 Orchestrated BKT state before: mastery={bkt_mastery_before}, params={bkt_params_before}")
-            
-            if orchestration_result and 'dkt' in orchestration_result:
-                dkt_data = orchestration_result['dkt']
-                if 'prediction' in dkt_data:
-                    dkt_prediction_before = float(dkt_data['prediction'])
-                logger.info(f"🧠 Orchestrated DKT state before: prediction={dkt_prediction_before}")
+            if ORCHESTRATION_AVAILABLE and orchestration_service:
+                logger.info(f"🎯 Getting pre-submission orchestrated state for {session.student.username}, skill {skill_id}")
+                
+                orchestration_result = orchestration_service.get_comprehensive_knowledge_state(
+                    student_username=session.student.username,
+                    subject=session.subject.code if hasattr(session.subject, 'code') else subject
+                )
+                
+                if orchestration_result and orchestration_result.get('success'):
+                    bkt_mastery_before = orchestration_result.get('bkt_mastery', 0.5)
+                    dkt_prediction_before = orchestration_result.get('dkt_prediction', 0.5)
                     
-        except Exception as e:
-            logger.warning(f"⚠️ Orchestration pre-submission state failed: {e}, using fallback")
-            try:
+                    # Extract BKT parameters if available
+                    knowledge_state = orchestration_result.get('knowledge_state', {})
+                    bkt_data = knowledge_state.get('bkt', {})
+                    if isinstance(bkt_data, dict):
+                        bkt_params_before = {
+                            'P_L': bkt_data.get('mastery_level', bkt_mastery_before),
+                            'P_T': bkt_data.get('transition_prob', 0.3),
+                            'P_G': bkt_data.get('guess_prob', 0.2),
+                            'P_S': bkt_data.get('slip_prob', 0.1)
+                        }
+                    
+                    logger.info(f"📊 Orchestrated pre-state: BKT={bkt_mastery_before:.3f}, DKT={dkt_prediction_before:.3f}")
+                else:
+                    logger.warning("⚠️ Orchestration returned no valid state, using defaults")
+                    
+            else:
+                logger.info("⚠️ Using fallback BKT service for pre-submission state")
                 # Fallback to individual BKT service
                 bkt_before = bkt_service.get_skill_bkt_params(session.student, skill_id)
                 bkt_mastery_before = bkt_before.P_L if bkt_before else 0.5
@@ -547,12 +642,13 @@ def submit_simple_answer(request):
                     'P_G': bkt_before.P_G if bkt_before else 0.2,
                     'P_S': bkt_before.P_S if bkt_before else 0.1
                 }
-                # Fallback to individual DKT service
                 dkt_prediction_before = dkt_service.get_skill_prediction(session.student, skill_id)
-            except Exception as fallback_error:
-                logger.error(f"❌ Both orchestration and fallback failed: {fallback_error}")
+                
+        except Exception as e:
+            logger.error(f"❌ Pre-submission state retrieval failed: {e}")
+            # Use defaults
 
-        # Process answer submission via ORCHESTRATION
+        # Process answer submission via FULL ORCHESTRATION SYSTEM
         bkt_updated = False
         dkt_updated = False
         new_mastery = bkt_mastery_before
@@ -560,39 +656,46 @@ def submit_simple_answer(request):
         dkt_prediction_after = dkt_prediction_before
         
         try:
-            logger.info(f"🎯 Processing answer submission via orchestration: correct={is_correct}, time_spent={time_spent}")
-            
-            # Use orchestration service to update both BKT and DKT
-            orchestrated_update = orchestration_service.process_interaction(
-                student=session.student,
-                subject=session.subject,
-                skill_id=skill_id,
-                is_correct=is_correct,
-                interaction_data={
-                    'question_id': question_id,
-                    'time_spent': time_spent,
-                    'difficulty': question_for_attempt.difficulty_level,
-                    'question_type': question_for_attempt.question_type
-                }
-            )
-            
-            if orchestrated_update and 'bkt' in orchestrated_update:
-                bkt_result = orchestrated_update['bkt']
-                if 'updated' in bkt_result and bkt_result['updated']:
-                    bkt_updated = True
-                    if 'mastery' in bkt_result:
-                        new_mastery = float(bkt_result['mastery'])
-                    if 'params' in bkt_result:
-                        bkt_params_after = bkt_result['params']
-                    logger.info(f"✅ Orchestrated BKT update successful: mastery={new_mastery}, params={bkt_params_after}")
+            if ORCHESTRATION_AVAILABLE and orchestration_service:
+                logger.info(f"🎯 Processing answer via full orchestration: correct={is_correct}, time_spent={time_spent}")
                 
-            if orchestrated_update and 'dkt' in orchestrated_update:
-                dkt_result = orchestrated_update['dkt']
-                if 'updated' in dkt_result and dkt_result['updated']:
-                    dkt_updated = True
-                    if 'prediction' in dkt_result:
-                        dkt_prediction_after = float(dkt_result['prediction'])
-                    logger.info(f"✅ Orchestrated DKT update successful: prediction={dkt_prediction_after}")
+                # Use orchestration service to update both BKT and DKT with comprehensive data
+                orchestrated_update = orchestration_service.process_interaction(
+                    student_username=session.student.username,
+                    subject=session.subject.code if hasattr(session.subject, 'code') else subject,
+                    question_id=question_id,
+                    is_correct=is_correct,
+                    time_spent=time_spent,
+                    difficulty_level=question_for_attempt.difficulty_level
+                )
+                
+                if orchestrated_update and orchestrated_update.get('success'):
+                    # Extract BKT updates
+                    if 'bkt_mastery' in orchestrated_update:
+                        bkt_updated = True
+                        new_mastery = orchestrated_update['bkt_mastery']
+                        logger.info(f"✅ Orchestrated BKT update: mastery={new_mastery:.3f}")
+                    
+                    # Extract DKT updates
+                    if 'dkt_prediction' in orchestrated_update:
+                        dkt_updated = True
+                        dkt_prediction_after = orchestrated_update['dkt_prediction']
+                        logger.info(f"✅ Orchestrated DKT update: prediction={dkt_prediction_after:.3f}")
+                    
+                    # Extract comprehensive parameters
+                    if 'knowledge_state' in orchestrated_update:
+                        knowledge_state = orchestrated_update['knowledge_state']
+                        bkt_data = knowledge_state.get('bkt', {})
+                        if isinstance(bkt_data, dict):
+                            bkt_params_after = {
+                                'P_L': bkt_data.get('mastery_level', new_mastery),
+                                'P_T': bkt_data.get('transition_prob', 0.3),
+                                'P_G': bkt_data.get('guess_prob', 0.2),
+                                'P_S': bkt_data.get('slip_prob', 0.1)
+                            }
+                else:
+                    logger.warning("⚠️ Orchestration returned invalid update, using fallback")
+                    raise Exception("Invalid orchestration response")
                         
         except Exception as e:
             logger.warning(f"⚠️ Orchestrated answer processing failed: {e}, using fallback individual updates")
@@ -615,6 +718,7 @@ def submit_simple_answer(request):
                     'P_G': updated_bkt.P_G if updated_bkt else 0.2,
                     'P_S': updated_bkt.P_S if updated_bkt else 0.1
                 }
+                logger.info(f"🔄 Fallback BKT update: mastery={new_mastery:.3f}")
             except Exception as bkt_error:
                 logger.warning(f"BKT fallback update failed: {bkt_error}")
                 bkt_updated = False
@@ -631,6 +735,7 @@ def submit_simple_answer(request):
                 )
                 dkt_updated = True
                 dkt_prediction_after = dkt_service.get_skill_prediction(session.student, skill_id)
+                logger.info(f"🔄 Fallback DKT update: prediction={dkt_prediction_after:.3f}")
             except Exception as dkt_error:
                 logger.warning(f"DKT fallback update failed: {dkt_error}")
                 dkt_updated = False
@@ -641,20 +746,29 @@ def submit_simple_answer(request):
         correct_answers = QuestionAttempt.objects.filter(session=session, is_correct=True).count()
         session_accuracy_after = correct_answers / max(total_questions, 1)
         
-        # Determine adaptation recommendation
-        mastery_change = new_mastery - bkt_mastery_before
-        if is_correct and new_mastery > 0.7:
-            adaptation_message = "🎉 Great job! Questions will get harder to challenge you more."
-            difficulty_change = "Questions getting HARDER"
-            next_difficulty = "harder"
-        elif not is_correct and new_mastery < 0.4:
-            adaptation_message = "💪 Let's try easier questions to build your confidence."
-            difficulty_change = "Questions getting EASIER"
-            next_difficulty = "easier"
+        # Use orchestration messages when available, otherwise fallback to simple logic
+        if ORCHESTRATION_AVAILABLE and 'orchestrated_update' in locals() and orchestrated_update and orchestrated_update.get('success'):
+            # Use intelligent messages from orchestration service
+            orchestrated_feedback = orchestrated_update.get('orchestrated_feedback', {})
+            adaptation_message = orchestrated_feedback.get('adaptation_message', '✅ Keep learning!')
+            difficulty_change = orchestrated_feedback.get('difficulty_adaptation', 'Continue practicing')
+            logger.info(f"📢 Using orchestrated messages: {difficulty_change} - {adaptation_message}")
         else:
-            adaptation_message = "👍 Good progress! Questions will stay at similar difficulty."
-            difficulty_change = "Difficulty staying SIMILAR"
-            next_difficulty = "same"
+            # Fallback to simple adaptation logic when orchestration not available
+            mastery_change = new_mastery - bkt_mastery_before
+            if is_correct and new_mastery > 0.7:
+                adaptation_message = "🎉 Great job! Questions will get harder to challenge you more."
+                difficulty_change = "Questions getting HARDER"
+                next_difficulty = "harder"
+            elif not is_correct and new_mastery < 0.4:
+                adaptation_message = "💪 Let's try easier questions to build your confidence."
+                difficulty_change = "Questions getting EASIER"
+                next_difficulty = "easier"
+            else:
+                adaptation_message = "👍 Good progress! Questions will stay at similar difficulty."
+                difficulty_change = "Difficulty staying SIMILAR"
+                next_difficulty = "same"
+            logger.info(f"📢 Using fallback messages: {difficulty_change} - {adaptation_message}")
         
         # Create comprehensive adaptive submission record for analysis (optional - won't fail if table doesn't exist)
         try:
@@ -782,38 +896,46 @@ def get_session_progress(request, session_id):
         total_questions = attempts.count()
         correct_answers = attempts.filter(is_correct=True).count()
         
-        # Get current knowledge states with orchestration
+        # Get current knowledge states with FULL ORCHESTRATION
         subject = session.session_config.get('subject', 'mathematics')
-        skill_id = f"{subject}_skill_1"
+        skill_id = f"{subject}_skill"  # FIXED: Use consistent skill_id format
         
         try:
-            # Enhanced orchestration integration
-            from orchestration.orchestration_service import orchestration_service
-            
-            orchestration_result = orchestration_service.get_comprehensive_knowledge_state(
-                student=session.student,
-                subject=subject,
-                skill_id=skill_id
-            )
-            
-            if orchestration_result:
-                # Extract BKT data
-                bkt_data = orchestration_result.get('bkt_state', {}).get(skill_id, {})
-                current_mastery = bkt_data.get('P_L', 0.5)
+            if ORCHESTRATION_AVAILABLE and orchestration_service:
+                # Enhanced orchestration integration for progress tracking
+                logger.info(f"📊 Getting orchestrated progress for {session.student.username}, subject: {subject}")
                 
-                # Extract DKT data  
-                dkt_data = orchestration_result.get('dkt_state', {})
-                dkt_prediction = dkt_data.get('skill_predictions', [0.5])[0] if dkt_data.get('skill_predictions') else 0.5
+                orchestration_result = orchestration_service.get_comprehensive_knowledge_state(
+                    student_username=session.student.username,
+                    subject=subject
+                )
                 
-                print(f"📊 Orchestrated Stats - BKT: {current_mastery:.3f}, DKT: {dkt_prediction:.3f}")
-            else:
-                # Fallback to individual services
-                bkt_params = bkt_service.get_skill_bkt_params(session.student, skill_id)
-                current_mastery = bkt_params.P_L if bkt_params else 0.5
-                dkt_prediction = 0.5
-                
+                if orchestration_result and orchestration_result.get('success'):
+                    current_mastery = orchestration_result.get('bkt_mastery', 0.5)
+                    dkt_prediction = orchestration_result.get('dkt_prediction', 0.5)
+                    combined_confidence = orchestration_result.get('combined_confidence', 0.5)
+                    
+                    # Enhanced learning status with orchestration data
+                    if combined_confidence > 0.8:
+                        learning_status = "🎉 Mastery Achieved! Excellent understanding!"
+                        next_difficulty = "Advanced"
+                    elif combined_confidence > 0.6:
+                        learning_status = "📈 Great progress! You're learning well!"
+                        next_difficulty = "Hard"
+                    elif combined_confidence > 0.4:
+                        learning_status = "💪 Good improvement! Keep practicing!"
+                        next_difficulty = "Medium"
+                    else:
+                        learning_status = "🌱 Building foundations! Stay focused!"
+                        next_difficulty = "Easy"
+                    
+                    logger.info(f"📊 Orchestrated Progress - BKT: {current_mastery:.3f}, DKT: {dkt_prediction:.3f}, Combined: {combined_confidence:.3f}")
+                else:
+                    logger.warning("⚠️ Orchestration returned no progress data, using fallback")
+                    raise Exception("Invalid orchestration progress response")
+                    
         except Exception as e:
-            print(f"⚠️ Orchestration failed in progress: {e}")
+            logger.warning(f"⚠️ Orchestration progress failed: {e}, using fallback")
             # Fallback implementation
             try:
                 bkt_params = bkt_service.get_skill_bkt_params(session.student, skill_id)
@@ -825,6 +947,30 @@ def get_session_progress(request, session_id):
                 dkt_prediction = dkt_service.get_skill_prediction(session.student, skill_id)
             except:
                 dkt_prediction = 0.5
+                
+            combined_confidence = (current_mastery + dkt_prediction) / 2
+            
+            # Basic learning status
+            if current_mastery > 0.7:
+                learning_status = "Excellent progress!"
+                next_difficulty = "Hard"
+            elif current_mastery > 0.4:
+                learning_status = "Good progress!"
+                next_difficulty = "Medium"
+            else:
+                learning_status = "Building foundations"
+                next_difficulty = "Easy"
+        
+        # Store current mastery in session for persistence
+        session_config = session.session_config or {}
+        session_config.update({
+            'current_bkt_mastery': current_mastery,
+            'current_dkt_prediction': dkt_prediction,
+            'current_combined_confidence': combined_confidence,
+            'last_mastery_update': timezone.now().isoformat()
+        })
+        session.session_config = session_config
+        session.save()
         
         progress = {
             'success': True,
@@ -839,16 +985,30 @@ def get_session_progress(request, session_id):
             },
             'knowledge_state': {
                 'bkt_mastery': f"{current_mastery:.1%}",
+                'bkt_mastery_raw': current_mastery,
                 'dkt_prediction': f"{dkt_prediction:.1%}",
-                'overall_progress': f"{(current_mastery + dkt_prediction) / 2:.1%}",
-                'skill_level': skill_id
+                'dkt_prediction_raw': dkt_prediction,
+                'combined_confidence': f"{combined_confidence:.1%}",
+                'combined_confidence_raw': combined_confidence,
+                'overall_progress': f"{combined_confidence:.1%}",
+                'skill_level': skill_id,
+                'orchestration_enabled': ORCHESTRATION_AVAILABLE
             },
             'adaptive_info': {
-                'difficulty_trend': "Adapting based on your performance",
-                'next_difficulty': "Easy" if current_mastery < 0.3 else "Hard" if current_mastery > 0.7 else "Medium",
-                'learning_status': "Excellent progress!" if current_mastery > 0.7 else "Good progress!" if current_mastery > 0.4 else "Building foundations"
+                'difficulty_trend': "LangGraph orchestration adapting to your performance",
+                'next_difficulty': next_difficulty,
+                'learning_status': learning_status,
+                'bkt_dkt_integrated': True,
+                'orchestration_active': ORCHESTRATION_AVAILABLE
             },
-            'message': f"📊 Progress: {correct_answers}/{total_questions} correct ({correct_answers / max(total_questions, 1):.1%}), Mastery: {current_mastery:.1%}"
+            'orchestration_details': {
+                'langraph_active': ORCHESTRATION_AVAILABLE,
+                'bkt_mastery_raw': current_mastery,
+                'dkt_prediction_raw': dkt_prediction,
+                'combined_confidence_raw': combined_confidence,
+                'adaptive_reasoning': f"Difficulty: {next_difficulty} based on combined BKT/DKT confidence of {combined_confidence:.1%}"
+            } if ORCHESTRATION_AVAILABLE else {},
+            'message': f"📊 LangGraph Orchestration: {correct_answers}/{total_questions} correct ({correct_answers / max(total_questions, 1):.1%}), Combined Confidence: {combined_confidence:.1%}"
         }
         
         return JsonResponse(progress)
@@ -859,6 +1019,289 @@ def get_session_progress(request, session_id):
             'success': False,
             'error': str(e),
             'message': 'Failed to get progress'
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def complete_session(request):
+    """
+    COMPLETE SESSION - Store final mastery scores and mark session complete
+    
+    Frontend can call this when session ends:
+    POST /complete-session
+    {
+        "session_id": "uuid-string",
+        "completion_reason": "finished" | "timeout" | "manual"
+    }
+    """
+    try:
+        data = json.loads(request.body)
+        session_id = data.get('session_id')
+        completion_reason = data.get('completion_reason', 'finished')
+        
+        if not session_id:
+            return JsonResponse({
+                'success': False,
+                'error': 'session_id required'
+            }, status=400)
+        
+        session = get_object_or_404(StudentSession, id=session_id)
+        
+        # Get final knowledge states with orchestration
+        subject = session.session_config.get('subject', 'mathematics')
+        skill_id = f"{subject}_skill"
+        
+        # Get current mastery scores
+        current_mastery = 0.5
+        dkt_prediction = 0.5
+        combined_confidence = 0.5
+        
+        try:
+            if ORCHESTRATION_AVAILABLE and orchestration_service:
+                orchestration_result = orchestration_service.get_comprehensive_knowledge_state(
+                    student_username=session.student.username,
+                    subject=subject
+                )
+                
+                if orchestration_result and orchestration_result.get('success'):
+                    current_mastery = orchestration_result.get('bkt_mastery', 0.5)
+                    dkt_prediction = orchestration_result.get('dkt_prediction', 0.5)
+                    combined_confidence = orchestration_result.get('combined_confidence', 0.5)
+                    
+                    logger.info(f"🏁 Final Mastery Scores - BKT: {current_mastery:.4f}, DKT: {dkt_prediction:.4f}, Combined: {combined_confidence:.4f}")
+                else:
+                    raise Exception("Orchestration failed for final mastery")
+        except Exception as e:
+            logger.warning(f"⚠️ Using fallback for final mastery calculation: {e}")
+            try:
+                bkt_params = bkt_service.get_skill_bkt_params(session.student, skill_id)
+                current_mastery = bkt_params.P_L if bkt_params else 0.5
+                dkt_prediction = dkt_service.get_skill_prediction(session.student, skill_id)
+                combined_confidence = (current_mastery + dkt_prediction) / 2
+            except Exception as fallback_error:
+                logger.error(f"❌ Fallback mastery calculation failed: {fallback_error}")
+        
+        # Calculate session statistics
+        attempts = QuestionAttempt.objects.filter(session=session)
+        total_questions = attempts.count()
+        correct_answers = attempts.filter(is_correct=True).count()
+        accuracy_rate = correct_answers / max(total_questions, 1)
+        
+        # Update session with final mastery scores and complete it
+        session.status = 'COMPLETED'
+        session.session_end_time = timezone.now()
+        
+        if session.session_start_time:
+            duration = session.session_end_time - session.session_start_time
+            session.session_duration_seconds = int(duration.total_seconds())
+        
+        # Store comprehensive final mastery data
+        final_mastery_data = {
+            'final_bkt_mastery': current_mastery,
+            'final_dkt_prediction': dkt_prediction,
+            'final_combined_confidence': combined_confidence,
+            'completion_reason': completion_reason,
+            'completion_timestamp': timezone.now().isoformat(),
+            'session_accuracy': accuracy_rate,
+            'questions_completed': total_questions,
+            'correct_answers': correct_answers,
+            'mastery_achievement': {
+                'expert': current_mastery >= 0.85,
+                'advanced': current_mastery >= 0.70,
+                'proficient': current_mastery >= 0.50,
+                'developing': current_mastery >= 0.30,
+                'novice': current_mastery < 0.30
+            }
+        }
+        
+        session_config = session.session_config or {}
+        session_config.update(final_mastery_data)
+        session.session_config = session_config
+        
+        # Update session performance fields
+        session.questions_attempted = total_questions
+        session.questions_correct = correct_answers
+        session.percentage_score = accuracy_rate * 100
+        
+        session.save()
+        
+        # Create or update StudentProgress with mastery tracking
+        from assessment.improved_models import StudentProgress, Subject
+        
+        # Get subject object
+        subject_mapping = {
+            'mathematics': 'quantitative_aptitude',
+            'math': 'quantitative_aptitude', 
+            'quantitative': 'quantitative_aptitude',
+            'quantitative_aptitude': 'quantitative_aptitude',
+            'reasoning': 'logical_reasoning',
+            'logic': 'logical_reasoning',
+            'logical_reasoning': 'logical_reasoning',
+            'data': 'data_interpretation',
+            'data_interpretation': 'data_interpretation',
+            'verbal': 'verbal_ability',
+            'english': 'verbal_ability',
+            'verbal_ability': 'verbal_ability'
+        }
+        
+        subject_code = subject_mapping.get(subject.lower(), 'quantitative_aptitude')
+        subject_obj, created = Subject.objects.get_or_create(
+            code=subject_code,
+            defaults={'name': subject.title(), 'is_active': True}
+        )
+        
+        # Update or create progress record
+        progress, created = StudentProgress.objects.get_or_create(
+            student=session.student,
+            subject=subject_obj,
+            defaults={
+                'total_sessions': 0,
+                'total_questions_attempted': 0,
+                'total_questions_correct': 0,
+                'current_mastery_score': 0.0
+            }
+        )
+        
+        # Update progress with session data and mastery
+        progress.update_from_session(session)
+        progress.update_mastery_score(combined_confidence)
+        
+        # Determine mastery level
+        mastery_level = 'novice'
+        if current_mastery >= 0.85:
+            mastery_level = 'expert'
+        elif current_mastery >= 0.70:
+            mastery_level = 'advanced'
+        elif current_mastery >= 0.50:
+            mastery_level = 'proficient'
+        elif current_mastery >= 0.30:
+            mastery_level = 'developing'
+        
+        return JsonResponse({
+            'success': True,
+            'message': f'🎉 Session completed! Final mastery: {current_mastery:.1%}',
+            'session_id': session_id,
+            'completion_data': {
+                'completion_reason': completion_reason,
+                'session_duration_minutes': session.session_duration_seconds / 60 if session.session_duration_seconds else 0,
+                'questions_completed': total_questions,
+                'accuracy_rate': f"{accuracy_rate:.1%}",
+                'final_mastery': {
+                    'bkt_mastery': f"{current_mastery:.1%}",
+                    'bkt_mastery_raw': current_mastery,
+                    'dkt_prediction': f"{dkt_prediction:.1%}",
+                    'dkt_prediction_raw': dkt_prediction,
+                    'combined_confidence': f"{combined_confidence:.1%}",
+                    'combined_confidence_raw': combined_confidence,
+                    'mastery_level': mastery_level,
+                    'mastery_achieved': current_mastery >= 0.70
+                },
+                'performance_summary': {
+                    'total_questions': total_questions,
+                    'correct_answers': correct_answers,
+                    'accuracy': accuracy_rate,
+                    'subject': subject,
+                    'orchestration_enabled': ORCHESTRATION_AVAILABLE
+                },
+                'next_steps': {
+                    'recommendation': 'Continue practicing' if current_mastery < 0.70 else 'Try advanced questions',
+                    'suggested_difficulty': 'moderate' if current_mastery < 0.70 else 'difficult',
+                    'mastery_progress': f"You've achieved {mastery_level} level mastery!"
+                }
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Complete session error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'message': 'Failed to complete session'
+        }, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_session_history(request, student_id):
+    """
+    GET SESSION HISTORY - Show all sessions with mastery progression
+    
+    Frontend can call this to show learning history:
+    GET /session-history/<student_id>/
+    """
+    try:
+        student = get_object_or_404(User, id=student_id)
+        
+        # Get all completed sessions with mastery data
+        sessions = StudentSession.objects.filter(
+            student=student,
+            status='COMPLETED'
+        ).order_by('-session_end_time')[:20]  # Last 20 sessions
+        
+        session_history = []
+        
+        for session in sessions:
+            session_config = session.session_config or {}
+            
+            # Extract mastery data from session config
+            final_bkt = session_config.get('final_bkt_mastery', 0.0)
+            final_dkt = session_config.get('final_dkt_prediction', 0.0)
+            final_combined = session_config.get('final_combined_confidence', 0.0)
+            
+            # Calculate mastery level
+            mastery_level = 'novice'
+            if final_bkt >= 0.85:
+                mastery_level = 'expert'
+            elif final_bkt >= 0.70:
+                mastery_level = 'advanced'
+            elif final_bkt >= 0.50:
+                mastery_level = 'proficient'
+            elif final_bkt >= 0.30:
+                mastery_level = 'developing'
+            
+            session_data = {
+                'session_id': str(session.id),
+                'subject': session_config.get('subject', session.subject.name),
+                'session_date': session.session_end_time.strftime('%Y-%m-%d %H:%M') if session.session_end_time else 'Unknown',
+                'duration_minutes': round(session.session_duration_seconds / 60, 1) if session.session_duration_seconds else 0,
+                'questions_attempted': session.questions_attempted,
+                'accuracy': f"{session.percentage_score:.1f}%" if session.percentage_score else "0%",
+                'mastery_scores': {
+                    'bkt_mastery': f"{final_bkt:.1%}",
+                    'bkt_mastery_raw': final_bkt,
+                    'dkt_prediction': f"{final_dkt:.1%}", 
+                    'dkt_prediction_raw': final_dkt,
+                    'combined_confidence': f"{final_combined:.1%}",
+                    'combined_confidence_raw': final_combined,
+                    'mastery_level': mastery_level,
+                    'mastery_achieved': final_bkt >= 0.70
+                },
+                'performance': {
+                    'total_questions': session.questions_attempted,
+                    'correct_answers': session.questions_correct,
+                    'accuracy_rate': session.percentage_score / 100 if session.percentage_score else 0
+                }
+            }
+            
+            session_history.append(session_data)
+        
+        return JsonResponse({
+            'success': True,
+            'student_id': student_id,
+            'student_name': student.get_full_name() or student.username,
+            'total_sessions': len(session_history),
+            'sessions': session_history,
+            'mastery_progression': {
+                'latest_mastery': session_history[0]['mastery_scores'] if session_history else None,
+                'mastery_trend': 'improving' if len(session_history) >= 2 and session_history[0]['mastery_scores']['bkt_mastery_raw'] > session_history[1]['mastery_scores']['bkt_mastery_raw'] else 'stable'
+            }
+        })
+        
+    except Exception as e:
+        logger.error(f"Get session history error: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'message': 'Failed to get session history'
         }, status=500)
 
 @csrf_exempt
@@ -1334,8 +1777,10 @@ def setup_simple_urls():
         path('start-session', start_simple_session, name='start_simple_session'),
         path('get-question/<str:session_id>/', get_simple_question, name='get_simple_question'),
         path('submit-answer', submit_simple_answer, name='submit_simple_answer'),
-        path('complete-session', complete_simple_session, name='complete_simple_session'),
+        path('complete-session', complete_session, name='complete_session'),  # Updated to use new endpoint
+        path('complete-session-legacy', complete_simple_session, name='complete_simple_session'),  # Keep legacy for compatibility
         path('session-progress/<str:session_id>/', get_session_progress, name='get_session_progress'),
+        path('session-history/<str:student_id>/', get_session_history, name='get_session_history'),  # New: Session history with mastery
         path('health', api_health, name='api_health'),
     ]
     
@@ -1357,10 +1802,19 @@ if __name__ == "__main__":
     print("   Body: {'session_id': '...', 'question_id': '...', 'selected_answer': 'A'}")
     print("   → Submits answer, shows adaptation")
     print()
-    print("4. GET /session-progress?session_id=<session_id>")
-    print("   → Shows learning progress")
+    print("4. POST /complete-session")
+    print("   Body: {'session_id': '...', 'completion_reason': 'finished'}")
+    print("   → Complete session and store final mastery scores")
     print()
-    print("5. GET /health")
+    print("5. GET /session-progress/<session_id>/")
+    print("   → Shows current learning progress and mastery")
+    print()
+    print("6. GET /session-history/<student_id>/")
+    print("   → Shows all completed sessions with mastery progression")
+    print()
+    print("7. GET /health")
     print("   → API health check")
     print()
+    print("🎯 NEW: Mastery scores are now stored in database!")
+    print("📊 NEW: Session history shows mastery progression!")
     print("✅ Ready for immediate frontend integration!")

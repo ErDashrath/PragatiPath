@@ -44,6 +44,7 @@ export interface AdaptiveQuestion {
   session_id: string;
   question_number: number;
   subject: string;
+  subject_display: string;
   difficulty: string;
   difficulty_display: string;
   question_text: string;
@@ -53,10 +54,16 @@ export interface AdaptiveQuestion {
   }>;
   correct_answer: string;
   explanation: string;
+  topic?: string;
+  subtopic?: string;
   adaptive_info: {
     mastery_level: number;
     skill_id: string;
     adaptive_reason: string;
+    orchestration_enabled: boolean;
+    bkt_mastery: number;
+    dkt_prediction: number;
+    real_question: boolean;
   };
   message: string;
   next_action: string;
@@ -93,6 +100,13 @@ export interface AdaptiveAnswerResponse {
     difficulty_adaptation: string;
     adaptation_message: string;
   };
+  orchestration_feedback?: {
+    bkt_mastery_change: string;
+    dkt_prediction_change: string;
+    combined_confidence_new: string;
+    next_adaptation_strategy: string;
+    learning_insight?: string;
+  };
   message: string;
   next_action: string;
 }
@@ -111,13 +125,24 @@ export interface AdaptiveProgress {
   knowledge_state: {
     bkt_mastery: string;
     dkt_prediction: string;
+    combined_confidence: string;
     overall_progress: string;
     skill_level: string;
+    orchestration_enabled: boolean;
   };
   adaptive_info: {
     difficulty_trend: string;
     next_difficulty: string;
     learning_status: string;
+    bkt_dkt_integrated: boolean;
+    orchestration_active: boolean;
+  };
+  orchestration_details: {
+    langraph_active: boolean;
+    bkt_mastery_raw: number;
+    dkt_prediction_raw: number;
+    combined_confidence_raw: number;
+    adaptive_reasoning: string;
   };
   message: string;
 }
@@ -144,7 +169,7 @@ export class AdaptiveLearningAPI {
    */
   static async startSession(data: AdaptiveStudent): Promise<AdaptiveSession> {
     console.log('🚀 Starting session with data:', data);
-    console.log('📍 Making request to:', `${ADAPTIVE_API_BASE}/start-session`);
+    console.log('📍 Making request to:', `${ADAPTIVE_API_BASE}/start-session/`);
     
     const response = await fetch(`${ADAPTIVE_API_BASE}/start-session/`, {
       method: 'POST',
@@ -236,29 +261,106 @@ export class AdaptiveLearningAPI {
   }
 
   /**
-   * Complete and save session to history
+   * Complete and save session to history with mastery tracking
    */
   static async completeSession(data: {
     session_id: string;
-    total_questions: number;
-    correct_answers: number;
-    session_duration_seconds: number;
-    final_mastery_level: number;
-    student_username: string;  // Add student_username parameter
+    completion_reason?: string;
   }): Promise<{
     success: boolean;
     message: string;
-    session_data: any;
+    completion_data: {
+      completion_reason: string;
+      session_duration_minutes: number;
+      questions_completed: number;
+      accuracy_rate: string;
+      final_mastery: {
+        bkt_mastery: string;
+        bkt_mastery_raw: number;
+        dkt_prediction: string;
+        dkt_prediction_raw: number;
+        combined_confidence: string;
+        combined_confidence_raw: number;
+        mastery_level: string;
+        mastery_achieved: boolean;
+      };
+      performance_summary: {
+        total_questions: number;
+        correct_answers: number;
+        accuracy: number;
+        subject: string;
+        orchestration_enabled: boolean;
+      };
+      next_steps: {
+        recommendation: string;
+        suggested_difficulty: string;
+        mastery_progress: string;
+      };
+    };
   }> {
+    const requestData = {
+      session_id: data.session_id,
+      completion_reason: data.completion_reason || 'finished'
+    };
+
     const response = await fetch(`${ADAPTIVE_API_BASE}/complete-session/`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(data),
+      body: JSON.stringify(requestData),
     });
     
     if (!response.ok) {
       const error = await response.json();
       throw new Error(error.message || 'Failed to complete session');
+    }
+    
+    return response.json();
+  }
+
+  /**
+   * Get session history with mastery progression
+   */
+  static async getSessionHistory(userId: number): Promise<{
+    success: boolean;
+    student_id: string;
+    student_name: string;
+    total_sessions: number;
+    sessions: Array<{
+      session_id: string;
+      subject: string;
+      session_date: string;
+      duration_minutes: number;
+      questions_attempted: number;
+      accuracy: string;
+      mastery_scores: {
+        bkt_mastery: string;
+        bkt_mastery_raw: number;
+        dkt_prediction: string;
+        dkt_prediction_raw: number;
+        combined_confidence: string;
+        combined_confidence_raw: number;
+        mastery_level: string;
+        mastery_achieved: boolean;
+      };
+      performance: {
+        total_questions: number;
+        correct_answers: number;
+        accuracy_rate: number;
+      };
+    }>;
+    mastery_progression: {
+      latest_mastery: any;
+      mastery_trend: string;
+    };
+  }> {
+    const response = await fetch(`${ADAPTIVE_API_BASE}/session-history/${userId}/`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.message || 'Failed to get session history');
     }
     
     return response.json();
