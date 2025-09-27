@@ -1765,6 +1765,134 @@ def complete_simple_session(request):
             'message': f'Error saving session: {str(e)}'
         }, status=500)
 
+@csrf_exempt
+@require_http_methods(["GET"])
+def get_session_details(request, session_id):
+    """
+    GET SESSION DETAILS - Get detailed session information including question attempts
+    
+    Frontend can call this:
+    GET /session-details/<session_id>/
+    Returns: Session info + question attempts + performance data
+    """
+    try:
+        session = get_object_or_404(StudentSession, id=session_id)
+        
+        # Get all question attempts for this session
+        attempts = QuestionAttempt.objects.filter(session=session).order_by('attempt_number')
+        
+        # Calculate session statistics
+        total_questions = attempts.count()
+        correct_answers = attempts.filter(is_correct=True).count()
+        accuracy_rate = correct_answers / max(total_questions, 1) * 100
+        
+        # Get final mastery scores from session config
+        session_config = session.session_config or {}
+        final_mastery = session_config.get('final_bkt_mastery', 0.5) * 100
+        mastery_level = 'Expert' if final_mastery >= 85 else 'Advanced' if final_mastery >= 70 else 'Proficient' if final_mastery >= 50 else 'Developing' if final_mastery >= 30 else 'Novice'
+        
+        # Format question attempts
+        question_attempts = []
+        for i, attempt in enumerate(attempts, 1):
+            # Get question details
+            question = attempt.question
+            question_data = {
+                'question_number': i,
+                'question_text': question.question if hasattr(question, 'question') else f"Question {i}",
+                'question_type': 'multiple_choice',
+                'student_answer': attempt.selected_option or 'N/A',
+                'correct_answer': question.answer if hasattr(question, 'answer') else 'A',
+                'is_correct': attempt.is_correct,
+                'time_spent_seconds': int(attempt.time_spent or 0),
+                'points_earned': 1 if attempt.is_correct else 0,
+                'question_points': 1,
+                'difficulty_level': question.difficulty_level if hasattr(question, 'difficulty_level') else 'Medium',
+                'topic': session.session_config.get('subject', 'General').replace('_', ' '),
+                'subtopic': f"Question {i}",
+                'explanation': f"{'Correct!' if attempt.is_correct else 'Review this concept.'} Time spent: {int(attempt.time_spent or 0)}s",
+                'confidence_level': final_mastery / 100
+            }
+            
+            # Add options if available
+            if hasattr(question, 'options') and question.options:
+                try:
+                    import json
+                    options = json.loads(question.options) if isinstance(question.options, str) else question.options
+                    question_data['options'] = options
+                except:
+                    question_data['options'] = {'A': 'Option A', 'B': 'Option B', 'C': 'Option C', 'D': 'Option D'}
+            else:
+                question_data['options'] = {'A': 'Option A', 'B': 'Option B', 'C': 'Option C', 'D': 'Option D'}
+            
+            question_attempts.append(question_data)
+        
+        # Build session info
+        session_info = {
+            'session_id': str(session.id),
+            'subject_name': session.session_config.get('subject', 'General').replace('_', ' ').title(),
+            'session_type': 'Adaptive Learning',
+            'session_name': f"Adaptive Learning - {session.session_config.get('subject', 'General').replace('_', ' ').title()}",
+            'status': session.status,
+            'questions_attempted': total_questions,
+            'questions_correct': correct_answers,
+            'percentage_score': accuracy_rate,
+            'total_score': correct_answers,
+            'max_possible_score': total_questions,
+            'grade': mastery_level,
+            'session_start_time': session.session_start_time.isoformat() if session.session_start_time else timezone.now().isoformat(),
+            'session_end_time': session.session_end_time.isoformat() if session.session_end_time else timezone.now().isoformat(),
+            'session_duration_seconds': session.session_duration_seconds or 0,
+        }
+        
+        # Performance analysis
+        topics_performance = {session_info['subject_name']: {'correct': correct_answers, 'total': total_questions, 'accuracy': accuracy_rate}}
+        difficulty_performance = {'Medium': {'correct': correct_answers, 'total': total_questions, 'accuracy': accuracy_rate}}
+        
+        avg_time = sum(int(attempt.time_spent or 0) for attempt in attempts) / max(total_questions, 1)
+        
+        performance_analysis = {
+            'topics_performance': topics_performance,
+            'difficulty_performance': difficulty_performance,
+            'average_time_per_question': avg_time,
+            'fastest_correct_answer': min((int(attempt.time_spent or 0) for attempt in attempts if attempt.is_correct), default=0),
+            'slowest_correct_answer': max((int(attempt.time_spent or 0) for attempt in attempts if attempt.is_correct), default=0),
+            'strengths': [mastery_level, f"{final_mastery:.1f}% Mastery Achieved"],
+            'improvement_areas': [] if final_mastery >= 70 else ['Continue practicing to improve mastery']
+        }
+        
+        recommendations = [
+            f"Your mastery level is {final_mastery:.1f}%",
+            f"You achieved {mastery_level} level performance",
+            "Great job!" if final_mastery >= 70 else "Keep practicing to improve!"
+        ]
+        
+        return JsonResponse({
+            'success': True,
+            'session_info': session_info,
+            'question_attempts': question_attempts,
+            'performance_analysis': performance_analysis,
+            'recommendations': recommendations,
+            'mastery_data': {
+                'bkt_mastery': final_mastery,
+                'mastery_level': mastery_level,
+                'mastery_achieved': final_mastery >= 70
+            }
+        })
+        
+    except StudentSession.DoesNotExist:
+        return JsonResponse({
+            'success': False,
+            'error': 'Session not found',
+            'message': 'The requested session does not exist'
+        }, status=404)
+    except Exception as e:
+        logger.error(f"Error getting session details for {session_id}: {e}")
+        return JsonResponse({
+            'success': False,
+            'error': str(e),
+            'message': 'Failed to load session details'
+        }, status=500)
+
 # ============================================================================
 # URL Routing Setup (if needed)
 # ============================================================================
@@ -1781,6 +1909,7 @@ def setup_simple_urls():
         path('complete-session-legacy', complete_simple_session, name='complete_simple_session'),  # Keep legacy for compatibility
         path('session-progress/<str:session_id>/', get_session_progress, name='get_session_progress'),
         path('session-history/<str:student_id>/', get_session_history, name='get_session_history'),  # New: Session history with mastery
+        path('session-details/<str:session_id>/', get_session_details, name='get_session_details'),  # New: Detailed session with question attempts
         path('health', api_health, name='api_health'),
     ]
     

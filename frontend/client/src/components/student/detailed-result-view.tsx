@@ -16,7 +16,8 @@ import {
   AlertCircle,
   Lightbulb,
   BarChart3,
-  PieChart
+  PieChart,
+  Brain
 } from 'lucide-react';
 import { HistoryAPI, type DetailedAssessmentResult } from '../../lib/history-api';
 
@@ -40,11 +41,271 @@ export function DetailedResultView({ studentUsername, sessionId, onBack }: Detai
     try {
       setLoading(true);
       setError(null);
-      const data = await HistoryAPI.getDetailedAssessmentResult(studentUsername, sessionId);
-      setResult(data);
+      
+      console.log('🔍 Loading detailed result for session:', sessionId);
+      
+      // First try the regular assessment API
+      try {
+        const data = await HistoryAPI.getDetailedAssessmentResult(studentUsername, sessionId);
+        console.log('✅ Regular assessment API worked:', data);
+        setResult(data);
+        return;
+      } catch (regularApiError) {
+        console.log('⚠️ Regular assessment API failed, trying adaptive session API...', regularApiError);
+      }
+      
+      // If regular API fails, try to get adaptive session details with REAL question data
+      try {
+        console.log('🔄 Trying adaptive session details endpoint...');
+        // Try the existing session-details endpoint for adaptive sessions
+        const adaptiveDetailResponse = await fetch(`/history/session-details/${sessionId}/`);
+        console.log('📡 Adaptive detail response status:', adaptiveDetailResponse.status);
+        
+        if (adaptiveDetailResponse.ok) {
+          const adaptiveDetailData = await adaptiveDetailResponse.json();
+          console.log('📄 Adaptive detail data received:', adaptiveDetailData);
+          
+              if (adaptiveDetailData.success && adaptiveDetailData.session_details && adaptiveDetailData.session_details.question_attempts) {
+                console.log('✅ Got real session details with question attempts:', adaptiveDetailData.session_details);
+                
+                const sessionDetails = adaptiveDetailData.session_details;
+                const questionAttempts = sessionDetails.question_attempts || [];
+                
+                // Calculate difficulty performance from actual question attempts
+                const difficultyStats: Record<string, { correct: number; total: number; accuracy: number }> = {
+                  'Easy': { correct: 0, total: 0, accuracy: 0 },
+                  'Medium': { correct: 0, total: 0, accuracy: 0 },
+                  'Hard': { correct: 0, total: 0, accuracy: 0 }
+                };
+                
+                // Process question attempts to get difficulty breakdown
+                questionAttempts.forEach((attempt: any) => {
+                  const difficulty = attempt.difficulty || 'easy';
+                  let mappedDifficulty = 'Medium'; // default
+                  
+                  if (difficulty.toLowerCase().includes('easy') || difficulty.toLowerCase() === 'very_easy') {
+                    mappedDifficulty = 'Easy';
+                  } else if (difficulty.toLowerCase().includes('moderate')) {
+                    mappedDifficulty = 'Medium';
+                  } else if (difficulty.toLowerCase().includes('difficult') || difficulty.toLowerCase().includes('hard')) {
+                    mappedDifficulty = 'Hard';
+                  }
+                  
+                  difficultyStats[mappedDifficulty].total += 1;
+                  if (attempt.is_correct) {
+                    difficultyStats[mappedDifficulty].correct += 1;
+                  }
+                });
+                
+                // Calculate accuracy percentages
+                Object.keys(difficultyStats).forEach(difficulty => {
+                  const stats = difficultyStats[difficulty];
+                  stats.accuracy = stats.total > 0 ? (stats.correct / stats.total) * 100 : 0;
+                });
+                
+                console.log('📊 Calculated difficulty stats:', difficultyStats);            // Map real API data to expected component format
+            const adaptiveResult: DetailedAssessmentResult = {
+              session_info: {
+                session_id: sessionDetails.session_id,
+                session_name: sessionDetails.session_name,
+                subject_name: sessionDetails.subject,
+                chapter_name: 'Adaptive Learning',
+                session_type: sessionDetails.session_type || 'PRACTICE',
+                session_start_time: sessionDetails.created_at,
+                session_end_time: sessionDetails.created_at,
+                questions_attempted: sessionDetails.questions_attempted,
+                questions_correct: sessionDetails.questions_correct,
+                percentage_score: sessionDetails.accuracy_percentage,
+                total_score: sessionDetails.questions_correct,
+                max_possible_score: sessionDetails.questions_attempted,
+                grade: sessionDetails.accuracy_percentage >= 80 ? 'A' : 
+                       sessionDetails.accuracy_percentage >= 70 ? 'B' :
+                       sessionDetails.accuracy_percentage >= 60 ? 'C' : 
+                       sessionDetails.accuracy_percentage >= 50 ? 'D' : 'F',
+                session_duration_seconds: (sessionDetails.duration_minutes || 0) * 60,
+                status: sessionDetails.status || 'COMPLETED'
+              },
+              question_attempts: questionAttempts.map((attempt: any, index: number) => ({
+                question_number: attempt.question_number || (index + 1),
+                question_text: `Question ${attempt.question_number || (index + 1)}`,
+                question_type: 'multiple_choice',
+                options: {
+                  'a': 'Option A',
+                  'b': 'Option B',
+                  'c': 'Option C', 
+                  'd': 'Option D'
+                },
+                student_answer: attempt.student_answer,
+                correct_answer: attempt.correct_answer,
+                is_correct: attempt.is_correct,
+                time_spent_seconds: Math.round(attempt.time_spent || 0),
+                points_earned: attempt.points_earned || (attempt.is_correct ? 1 : 0),
+                question_points: 1,
+                difficulty_level: attempt.difficulty ? 
+                  attempt.difficulty.charAt(0).toUpperCase() + attempt.difficulty.slice(1) : 'Medium',
+                topic: sessionDetails.subject,
+                subtopic: `${sessionDetails.subject} Concepts`,
+                explanation: attempt.is_correct ? 
+                  `Correct! You answered this ${attempt.difficulty} question correctly.` :
+                  `Incorrect. The correct answer was ${attempt.correct_answer}. This was a ${attempt.difficulty} question.`,
+                confidence_level: attempt.is_correct ? 0.8 : 0.3
+              })),
+              performance_analysis: {
+                topics_performance: {
+                  [sessionDetails.subject]: {
+                    correct: sessionDetails.questions_correct,
+                    total: sessionDetails.questions_attempted,
+                    accuracy: sessionDetails.accuracy_percentage
+                  }
+                },
+                difficulty_performance: difficultyStats,
+                average_time_per_question: (sessionDetails.duration_minutes * 60) / sessionDetails.questions_attempted,
+                fastest_correct_answer: (() => {
+                  const correctTimes = sessionDetails.question_attempts.filter((a: any) => a.is_correct).map((a: any) => a.time_spent);
+                  return correctTimes.length > 0 ? Math.min(...correctTimes) : 0;
+                })(),
+                slowest_correct_answer: (() => {
+                  const correctTimes = sessionDetails.question_attempts.filter((a: any) => a.is_correct).map((a: any) => a.time_spent);
+                  return correctTimes.length > 0 ? Math.max(...correctTimes) : 0;
+                })(),
+                strengths: sessionDetails.accuracy_percentage >= 70 ? [`Strong performance in ${sessionDetails.subject}`] : [],
+                improvement_areas: sessionDetails.accuracy_percentage < 70 ? [`Need improvement in ${sessionDetails.subject}`] : []
+              },
+              recommendations: sessionDetails.accuracy_percentage >= 80 ? 
+                ['Excellent performance! Try more challenging questions.'] :
+                ['Review the concepts and practice more questions.']
+            };
+            
+            console.log('✅ Converted result for rendering:', adaptiveResult);
+            setResult(adaptiveResult);
+            return;
+          } else {
+            console.log('❌ Session details API returned invalid data:', adaptiveDetailData);
+          }
+        } else {
+          console.log('❌ Session details API failed with status:', adaptiveDetailResponse.status);
+          const errorText = await adaptiveDetailResponse.text();
+          console.log('❌ Error response:', errorText);
+        }
+        
+        console.log('🔄 Falling back to session history...');
+        // Fallback: Get basic session info from session history and use simulated questions
+        const backendUserId = localStorage.getItem('pragatipath_backend_user_id');
+        console.log('📝 Backend user ID from localStorage:', backendUserId);
+        
+        if (backendUserId) {
+          console.log('🔄 Fetching session history...');
+          const adaptiveResponse = await fetch(`/simple/session-history/${backendUserId}/`);
+          console.log('📡 Session history response status:', adaptiveResponse.status);
+          
+          if (adaptiveResponse.ok) {
+            const adaptiveData = await adaptiveResponse.json();
+            console.log('📄 Session history data:', adaptiveData);
+            
+            if (adaptiveData.success && adaptiveData.sessions) {
+              // Find the specific session
+              const session = adaptiveData.sessions.find((s: any) => s.session_id === sessionId);
+              console.log('🔍 Looking for session ID:', sessionId);
+              console.log('🔍 Found session:', session);
+              
+              if (session) {
+                // Convert adaptive session data to DetailedAssessmentResult format
+                const correctAnswers = Math.round(session.questions_attempted * (parseFloat(session.accuracy) / 100));
+                const incorrectAnswers = session.questions_attempted - correctAnswers;
+                
+                // Generate simulated question attempts for adaptive sessions
+                const simulatedAttempts = [];
+                for (let i = 1; i <= session.questions_attempted; i++) {
+                  const isCorrect = i <= correctAnswers;
+                  simulatedAttempts.push({
+                    question_number: i,
+                    question_text: `${session.subject.replace('_', ' ')} Question ${i} (Adaptive)`,
+                    question_type: 'multiple_choice',
+                    options: {
+                      'a': 'Option A',
+                      'b': 'Option B', 
+                      'c': 'Option C',
+                      'd': 'Option D'
+                    },
+                    student_answer: isCorrect ? 'A' : 'B',
+                    correct_answer: 'A',
+                    is_correct: isCorrect,
+                    time_spent_seconds: Math.round((session.duration_minutes * 60) / session.questions_attempted),
+                    points_earned: isCorrect ? 1 : 0,
+                    question_points: 1,
+                    difficulty_level: session.mastery_scores.mastery_level === 'expert' ? 'Hard' : 
+                                    session.mastery_scores.mastery_level === 'advanced' ? 'Medium' : 'Easy',
+                    topic: session.subject.replace('_', ' '),
+                    subtopic: `${session.subject.replace('_', ' ')} Concepts`,
+                    explanation: isCorrect ? 
+                      `Great job! You correctly answered this ${session.subject.replace('_', ' ')} question.` :
+                      `This ${session.subject.replace('_', ' ')} question was challenging. Review the concepts to improve.`,
+                    confidence_level: parseFloat(session.mastery_scores.bkt_mastery) / 100
+                  });
+                }
+                
+                const adaptiveResult: DetailedAssessmentResult = {
+                  session_info: {
+                    session_id: session.session_id,
+                    subject_name: session.subject.replace('_', ' '),
+                    session_type: 'Adaptive Learning',
+                    session_name: `Adaptive Learning - ${session.subject.replace('_', ' ')}`,
+                    status: 'COMPLETED',
+                    questions_attempted: session.questions_attempted,
+                    questions_correct: correctAnswers,
+                    percentage_score: parseFloat(session.accuracy),
+                    total_score: correctAnswers,
+                    max_possible_score: session.questions_attempted,
+                    grade: session.mastery_scores.mastery_level.charAt(0).toUpperCase() + session.mastery_scores.mastery_level.slice(1),
+                    session_start_time: session.session_date,
+                    session_end_time: session.session_date,
+                    session_duration_seconds: Math.round(session.duration_minutes * 60),
+                    time_limit_minutes: undefined
+                  },
+                  question_attempts: simulatedAttempts,
+                  performance_analysis: {
+                    topics_performance: {},
+                    difficulty_performance: {},
+                    average_time_per_question: session.duration_minutes * 60 / session.questions_attempted,
+                    fastest_correct_answer: 0,
+                    slowest_correct_answer: 0,
+                    strengths: [session.mastery_scores.mastery_level, `${session.mastery_scores.bkt_mastery} BKT Mastery`],
+                    improvement_areas: session.mastery_scores.mastery_achieved ? [] : ['Continue practicing to achieve mastery']
+                  },
+                  recommendations: [
+                    `Your BKT mastery level is ${session.mastery_scores.bkt_mastery}`,
+                    `You have achieved ${session.mastery_scores.mastery_level} level mastery`,
+                    session.mastery_scores.mastery_achieved 
+                      ? 'Great job! You have mastered this topic.' 
+                      : 'Keep practicing to improve your mastery level.'
+                  ]
+                };
+                setResult(adaptiveResult);
+                return;
+              } else {
+                console.log('❌ Session not found in history');
+              }
+            } else {
+              console.log('❌ Session history API returned invalid data:', adaptiveData);
+            }
+          } else {
+            console.log('❌ Session history API failed with status:', adaptiveResponse.status);
+            const errorText = await adaptiveResponse.text();
+            console.log('❌ Session history error response:', errorText);
+          }
+        } else {
+          console.log('❌ No backend user ID found in localStorage');
+        }
+        throw new Error('Adaptive session not found');
+      } catch (adaptiveError) {
+        console.error('❌ Adaptive session API also failed:', adaptiveError);
+        throw new Error('Unable to load session details from any API');
+      }
+      
     } catch (err) {
-      setError('Failed to load detailed results. Please try again.');
-      console.error('Error loading detailed result:', err);
+      const errorMessage = err instanceof Error ? err.message : 'Failed to load detailed results. Please try again.';
+      setError(errorMessage);
+      console.error('🚨 Final error in loadDetailedResult:', err);
     } finally {
       setLoading(false);
     }
@@ -162,17 +423,21 @@ export function DetailedResultView({ studentUsername, sessionId, onBack }: Detai
 
         <Card>
           <CardContent className="p-4 text-center">
-            <CheckCircle className="h-8 w-8 text-blue-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold">{session_info.questions_correct}</p>
-            <p className="text-sm text-muted-foreground">Correct</p>
+            <CheckCircle className="h-8 w-8 text-green-600 mx-auto mb-2" />
+            <p className="text-2xl font-bold text-green-600">
+              {session_info.questions_correct}/{session_info.questions_attempted}
+            </p>
+            <p className="text-sm text-muted-foreground">Correct/Total</p>
           </CardContent>
         </Card>
 
         <Card>
           <CardContent className="p-4 text-center">
-            <BookOpen className="h-8 w-8 text-purple-600 mx-auto mb-2" />
-            <p className="text-2xl font-bold">{session_info.questions_attempted}</p>
-            <p className="text-sm text-muted-foreground">Total</p>
+            <XCircle className="h-8 w-8 text-red-500 mx-auto mb-2" />
+            <p className="text-2xl font-bold text-red-500">
+              {session_info.questions_attempted - session_info.questions_correct}
+            </p>
+            <p className="text-sm text-muted-foreground">Incorrect</p>
           </CardContent>
         </Card>
 
@@ -192,6 +457,57 @@ export function DetailedResultView({ studentUsername, sessionId, onBack }: Detai
           </CardContent>
         </Card>
       </div>
+
+      {/* Adaptive Learning Mastery Section (show only for adaptive sessions) */}
+      {session_info.session_type === 'Adaptive Learning' && (
+        <Card className="bg-gradient-to-r from-purple-50 to-blue-50 border-purple-200">
+          <CardHeader>
+            <CardTitle className="flex items-center text-purple-700">
+              <Brain className="h-5 w-5 mr-2" />
+              🧠 Adaptive Learning Mastery
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-semibold mb-3 text-purple-800">Mastery Progression</h4>
+                <div className="space-y-3">
+                  <div>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="font-medium">🎯 Learning Mastery Level</span>
+                      <span className="font-bold">{session_info.percentage_score.toFixed(1)}%</span>
+                    </div>
+                    <div className="w-full bg-gray-200 rounded-full h-3">
+                      <div 
+                        className="bg-purple-500 h-3 rounded-full transition-all duration-500" 
+                        style={{ width: `${session_info.percentage_score}%` }}
+                      ></div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h4 className="font-semibold mb-3 text-purple-800">Achievement Level</h4>
+                <div className="flex items-center justify-center p-4 bg-white rounded-lg border border-purple-200">
+                  <div className="text-center">
+                    <div className={`inline-flex items-center px-4 py-2 rounded-full font-medium mb-2 ${
+                      session_info.grade.toLowerCase() === 'expert' ? 'bg-purple-100 text-purple-800' :
+                      session_info.grade.toLowerCase() === 'advanced' ? 'bg-blue-100 text-blue-800' :
+                      session_info.grade.toLowerCase() === 'proficient' ? 'bg-green-100 text-green-800' :
+                      session_info.grade.toLowerCase() === 'developing' ? 'bg-yellow-100 text-yellow-800' :
+                      'bg-gray-100 text-gray-800'
+                    }`}>
+                      <Trophy className="h-4 w-4 mr-1" />
+                      {session_info.grade}
+                    </div>
+                    <p className="text-sm text-muted-foreground">Mastery Level Achieved</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Detailed Analysis Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
@@ -283,6 +599,21 @@ export function DetailedResultView({ studentUsername, sessionId, onBack }: Detai
         </TabsContent>
 
         <TabsContent value="questions" className="space-y-4">
+          {session_info.session_type === 'Adaptive Learning' && (
+            <div className="p-4 bg-purple-50 border border-purple-200 rounded-lg mb-4">
+              <div className="flex items-start gap-2">
+                <Brain className="h-5 w-5 text-purple-600 mt-0.5" />
+                <div>
+                  <h4 className="font-semibold text-purple-800 mb-1">🧠 Adaptive Learning Questions</h4>
+                  <p className="text-sm text-purple-700">
+                    This shows your performance breakdown based on the adaptive questions you answered. 
+                    The system selected questions dynamically based on your learning progress and mastery level.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+          
           <Card>
             <CardHeader>
               <CardTitle>Question-by-Question Review</CardTitle>

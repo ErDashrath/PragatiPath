@@ -161,47 +161,63 @@ export function AssessmentHistory({ studentUsername, onViewDetails, backendUserI
         return;
       }
 
-      // Try to load enhanced session history first
-      try {
-        let enhancedResponse = await fetch(`/history/student/${studentUsername}/`);
-        console.log('Enhanced API Response Status:', enhancedResponse.status);
+      // Create comprehensive username fallback system for all students
+      const getUniversalUsernameFallbacks = (username: string) => {
+        if (!username) return [];
         
-        // If first attempt fails and username doesn't start with 'student_', try prefixed version
-        if (!enhancedResponse.ok && !studentUsername.startsWith('student_')) {
-          console.log('Trying with student_ prefix...');
-          enhancedResponse = await fetch(`/history/student/student_${studentUsername}/`);
-          console.log('Prefixed API Response Status:', enhancedResponse.status);
-        }
+        const fallbacks = [
+          username,                           // Original username
+          `student_${username}`,             // With student_ prefix
+          username.replace('student_', ''),   // Without student_ prefix
+          username.toLowerCase(),             // Lowercase version
+          username.toUpperCase(),             // Uppercase version
+        ];
         
-        // Also try direct backend API if proxy fails
-        if (!enhancedResponse.ok) {
-          console.log('Trying direct backend API call...');
-          try {
-            enhancedResponse = await fetch(`http://localhost:8000/history/student/${studentUsername}/`);
-            console.log('Direct backend API Response Status:', enhancedResponse.status);
-          } catch (directError) {
-            console.log('Direct backend API also failed:', directError);
+        // Remove duplicates and empty strings
+        const uniqueFallbacks = [];
+        const seen = new Set();
+        for (const fallback of fallbacks) {
+          if (fallback && fallback.trim() && !seen.has(fallback)) {
+            uniqueFallbacks.push(fallback);
+            seen.add(fallback);
           }
         }
-        
-        if (enhancedResponse.ok) {
-          try {
-            const enhancedData = await enhancedResponse.json();
-            setEnhancedHistory(enhancedData);
-          } catch (jsonError) {
-            console.log('❌ Enhanced API returned HTML instead of JSON:', jsonError);
-            const textResponse = await enhancedResponse.text();
-            console.log('Response preview:', textResponse.substring(0, 100));
-            // Don't fail completely, just skip enhanced history
+        return uniqueFallbacks;
+      };
+      
+      const usernameFallbacks = getUniversalUsernameFallbacks(studentUsername);
+      console.log(`Username fallbacks for ${studentUsername}:`, usernameFallbacks);
+
+      // Try to load enhanced session history first with comprehensive fallback system
+      let enhancedData = null;
+      let workingUsername = null;
+      
+      for (const tryUsername of usernameFallbacks) {
+        try {
+          console.log(`Trying enhanced API with username: ${tryUsername}`);
+          let enhancedResponse = await fetch(`/history/student/${tryUsername}/`);
+          console.log(`Enhanced API Response Status for ${tryUsername}:`, enhancedResponse.status);
+          
+          if (enhancedResponse.ok) {
+            try {
+              enhancedData = await enhancedResponse.json();
+              workingUsername = tryUsername;
+              console.log(`✅ Enhanced API successful with username: ${tryUsername}`);
+              setEnhancedHistory(enhancedData);
+              break; // Stop trying once we find a working username
+            } catch (jsonError) {
+              console.log(`❌ Enhanced API returned HTML instead of JSON for ${tryUsername}:`, jsonError);
+              // Continue to next username
+            }
           }
-        } else {
-          console.log('❌ Enhanced API failed with status:', enhancedResponse.status);
-          const errorText = await enhancedResponse.text();
-          console.log('Error response:', errorText.substring(0, 200));
+        } catch (err) {
+          console.log(`Enhanced API error for ${tryUsername}:`, err);
+          // Continue to next username
         }
-      } catch (err) {
-        console.warn('Enhanced history not available, falling back to legacy API');
-        console.error('Enhanced history error:', err);
+      }
+      
+      if (!workingUsername) {
+        console.log('❌ Enhanced API failed for all username variations');
       }
 
       // Load mastery history using backend user ID (multiple sources with auto-detection)
@@ -262,16 +278,38 @@ export function AssessmentHistory({ studentUsername, onViewDetails, backendUserI
         // Don't set error as this is optional enhancement
       }
 
-      // Load legacy history and stats for compatibility
-      const [historyData, statsData] = await Promise.all([
-        selectedSubject === 'all' 
-          ? HistoryAPI.getStudentHistory(studentUsername)
-          : HistoryAPI.getSubjectHistory(studentUsername, selectedSubject),
-        HistoryAPI.getStudentStats(studentUsername)
-      ]);
+      // Load legacy history and stats for compatibility with username fallback system
+      let legacyHistoryData: any[] = [];
+      let legacyStatsData: any = null;
+      
+      // Try the working username first, then fallback to other usernames
+      const legacyUsernamesToTry = workingUsername ? [workingUsername, ...usernameFallbacks] : usernameFallbacks;
+      
+      for (const tryUsername of legacyUsernamesToTry) {
+        try {
+          console.log(`Trying legacy API with username: ${tryUsername}`);
+          const [historyData, statsData] = await Promise.all([
+            selectedSubject === 'all' 
+              ? HistoryAPI.getStudentHistory(tryUsername)
+              : HistoryAPI.getSubjectHistory(tryUsername, selectedSubject),
+            HistoryAPI.getStudentStats(tryUsername)
+          ]);
+          
+          // If we got any data, use it
+          if (historyData && historyData.length > 0) {
+            legacyHistoryData = historyData;
+            legacyStatsData = statsData;
+            console.log(`✅ Legacy API successful with username: ${tryUsername}, found ${historyData.length} records`);
+            break;
+          }
+        } catch (legacyErr) {
+          console.log(`Legacy API error for ${tryUsername}:`, legacyErr);
+          // Continue to next username
+        }
+      }
 
-      setHistory(historyData);
-      setStats(statsData);
+      setHistory(legacyHistoryData);
+      setStats(legacyStatsData);
       setLastUpdated(new Date());
     } catch (err) {
       setError('Failed to load assessment history. Please try again.');
@@ -572,6 +610,10 @@ export function AssessmentHistory({ studentUsername, onViewDetails, backendUserI
                             </div>
                           </div>
                         </div>
+                        <Button variant="outline" size="sm" onClick={() => onViewDetails(session.session_id)}>
+                          <Eye className="h-4 w-4 mr-1" />
+                          Details
+                        </Button>
                       </div>
                     </div>
                   );

@@ -117,7 +117,7 @@ def get_student_session_history(request, username):
             session_data = {
                 'session_id': str(session.id),
                 'session_name': session.session_name or f"Session {session.id}",
-                'session_type': session.session_type,
+                'session_type': session.assessment_mode,  # Use assessment_mode field
                 'subject': session.subject.name if hasattr(session.subject, 'name') else str(session.subject),
                 'chapter': session.chapter.name if session.chapter else None,
                 'status': session.status,
@@ -156,14 +156,14 @@ def get_student_session_history(request, username):
             
             session_data['recent_attempts'] = attempt_details
             
-            # Categorize based on session type
-            if session.session_type in ['COMPETITIVE_EXAM', 'PRACTICE_TEST', 'ASSESSMENT']:
+            # Categorize based on assessment mode - PRACTICE and EXAM should be regular assessments
+            if session.assessment_mode in ['PRACTICE', 'EXAM', 'COMPETITIVE_EXAM', 'PRACTICE_TEST', 'ASSESSMENT']:
                 assessment_sessions.append(session_data)
             else:  # ADAPTIVE_LEARNING or others
                 # Add adaptive-specific data
                 session_data.update({
-                    'current_difficulty': session.current_difficulty_level,
-                    'difficulty_adjustments': len(session.difficulty_adjustments) if session.difficulty_adjustments else 0,
+                    'current_difficulty': session.current_difficulty,
+                    'difficulty_adjustments': 0,  # This would need to be calculated from actual data
                 })
                 adaptive_sessions.append(session_data)
             

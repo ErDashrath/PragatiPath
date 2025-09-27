@@ -14,7 +14,9 @@ import {
   Trophy, 
   Target,
   Globe,
-  Sparkles
+  Sparkles,
+  ArrowLeft,
+  AlertCircle
 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useToast } from "@/hooks/use-toast";
@@ -608,7 +610,7 @@ export default function AdaptiveLearningInterface({
         <Card>
           <CardHeader>
             {/* Orchestration Status Banner */}
-            {currentQuestion.orchestration_enabled && (
+            {currentQuestion.adaptive_info?.orchestration_enabled && (
               <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border border-purple-200">
                 <div className="flex items-center justify-between mb-2">
                   <div className="flex items-center gap-2">
@@ -619,13 +621,13 @@ export default function AdaptiveLearningInterface({
                     </Badge>
                   </div>
                   <Badge className="bg-purple-100 text-purple-800">
-                    BKT: {currentQuestion.bkt_mastery} | DKT: {currentQuestion.dkt_prediction}
+                    BKT: {currentQuestion.adaptive_info?.bkt_mastery} | DKT: {currentQuestion.adaptive_info?.dkt_prediction}
                   </Badge>
                 </div>
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
                   <div className="flex justify-between">
                     <span className="text-purple-600">Combined Confidence:</span>
-                    <span className="font-mono font-bold">{currentQuestion.confidence}</span>
+                    <span className="font-mono font-bold">{currentQuestion.adaptive_info?.mastery_level || 'N/A'}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-purple-600">Knowledge State:</span>
@@ -636,9 +638,9 @@ export default function AdaptiveLearningInterface({
                     <span className="font-medium text-green-600">Real-time</span>
                   </div>
                 </div>
-                {currentQuestion.adaptive_reason && (
+                {currentQuestion.adaptive_info?.adaptive_reason && (
                   <div className="mt-3 text-sm text-purple-700 bg-purple-100 p-3 rounded">
-                    <strong>🎯 Personalized Selection:</strong> {currentQuestion.adaptive_reason}
+                    <strong>🎯 Personalized Selection:</strong> {currentQuestion.adaptive_info.adaptive_reason}
                   </div>
                 )}
               </div>
@@ -651,7 +653,7 @@ export default function AdaptiveLearningInterface({
                   <Badge className={AdaptiveLearningUtils.getDifficultyColor(currentQuestion.difficulty)}>
                     {AdaptiveLearningUtils.getDifficultyEmoji(currentQuestion.difficulty)} {currentQuestion.difficulty.toUpperCase()}
                   </Badge>
-                  {currentQuestion.orchestration_enabled && (
+                  {currentQuestion.adaptive_info?.orchestration_enabled && (
                     <Badge className="bg-gradient-to-r from-purple-500 to-blue-500 text-white">
                       🚀 Orchestrated
                     </Badge>
@@ -666,7 +668,7 @@ export default function AdaptiveLearningInterface({
                   <Clock className="w-4 h-4 mr-1" />
                   <span>Mastery: {AdaptiveLearningUtils.formatMasteryLevel(currentQuestion.adaptive_info.mastery_level)}</span>
                 </div>
-                {currentQuestion.orchestration_enabled && (
+                {currentQuestion.adaptive_info?.orchestration_enabled && (
                   <div className="text-xs text-purple-600 font-medium">
                     🧠 BKT+DKT Integrated
                   </div>

@@ -6,8 +6,8 @@ import { insertStudentProfileSchema, insertAssessmentSessionSchema } from "@shar
 
 // Add proxy middleware for Django Core API and Simple API
 const proxyToDjango = async (req: any, res: any, next: any) => {
-  // Proxy /api/core/*, /simple/*, and /api/user requests to Django backend
-  if (req.path.startsWith('/api/core/') || req.path.startsWith('/simple/') || req.path === '/api/user') {
+  // Proxy /api/core/*, /simple/*, /history/*, and /api/user requests to Django backend
+  if (req.path.startsWith('/api/core/') || req.path.startsWith('/simple/') || req.path.startsWith('/history/') || req.path === '/api/user') {
     try {
       // Map /api/user to /api/core/user for Django
       const djangoPath = req.path === '/api/user' ? '/api/core/user' : req.path;
