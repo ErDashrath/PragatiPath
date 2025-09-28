@@ -1123,18 +1123,31 @@ export function AssessmentHistory({ studentUsername, onViewDetails, backendUserI
                             </div>
 
                             {/* Performance Summary */}
-                            <div className="flex items-center gap-4 mt-3 text-sm">
-                              <span className="flex items-center gap-1">
-                                <CheckCircle className="h-3 w-3 text-green-500" />
-                                {session.performance.correct_answers} correct
-                              </span>
-                              <span className="flex items-center gap-1">
-                                <XCircle className="h-3 w-3 text-red-500" />
-                                {session.performance.total_questions - session.performance.correct_answers} incorrect
-                              </span>
-                              <span className="text-muted-foreground">
-                                Total: {session.performance.total_questions} questions
-                              </span>
+                            <div className="flex items-center justify-between mt-3">
+                              <div className="flex items-center gap-4 text-sm">
+                                <span className="flex items-center gap-1">
+                                  <CheckCircle className="h-3 w-3 text-green-500" />
+                                  {session.performance.correct_answers} correct
+                                </span>
+                                <span className="flex items-center gap-1">
+                                  <XCircle className="h-3 w-3 text-red-500" />
+                                  {session.performance.total_questions - session.performance.correct_answers} incorrect
+                                </span>
+                                <span className="text-muted-foreground">
+                                  Total: {session.performance.total_questions} questions
+                                </span>
+                              </div>
+                              
+                              {/* View Details Button for Mastery Sessions */}
+                              <Button 
+                                variant="outline" 
+                                size="sm" 
+                                onClick={() => onViewDetails(session.session_id)}
+                                className="ml-4"
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                View Analysis
+                              </Button>
                             </div>
                           </div>
                         );

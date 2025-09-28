@@ -29,6 +29,9 @@ import enhanced_history_api_fixed as enhanced_history_api
 # Import adaptive session API
 from assessment import adaptive_session_api
 
+# Import admin API
+import admin_api
+
 # Import app routers
 from core.api import router as core_router
 from student_model.api import router as student_model_router
@@ -60,6 +63,7 @@ api = NinjaAPI(
 
 # Add all app routers - Fixed duplicate issue
 api.add_router("/core/", core_router, tags=["Core"])
+api.add_router("/admin/", admin_api.admin_router, tags=["Admin"])
 api.add_router("/student-model/", student_model_router, tags=["Student Model"])
 api.add_router("/assessment/", assessment_router, tags=["Assessment"])
 api.add_router("/competitive/", competitive_v1_router, tags=["Competitive Exam v1"])  # Direct competitive route

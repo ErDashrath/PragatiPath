@@ -6,8 +6,8 @@ import { insertStudentProfileSchema, insertAssessmentSessionSchema } from "@shar
 
 // Add proxy middleware for Django Core API and Simple API
 const proxyToDjango = async (req: any, res: any, next: any) => {
-  // Proxy /api/core/*, /simple/*, /history/*, and /api/user requests to Django backend
-  if (req.path.startsWith('/api/core/') || req.path.startsWith('/simple/') || req.path.startsWith('/history/') || req.path === '/api/user') {
+  // Proxy /api/core/*, /simple/*, /history/*, /api/user, and /api/admin/* requests to Django backend
+  if (req.path.startsWith('/api/core/') || req.path.startsWith('/simple/') || req.path.startsWith('/history/') || req.path === '/api/user' || req.path.startsWith('/api/admin/')) {
     try {
       // Map /api/user to /api/core/user for Django
       const djangoPath = req.path === '/api/user' ? '/api/core/user' : req.path;
@@ -331,24 +331,24 @@ export function registerRoutes(app: Express): Server {
     }
   });
 
-  // Admin endpoints
-  app.get("/api/admin/students", async (req, res) => {
-    try {
-      const students = await storage.getAllStudentProfiles();
-      res.json(students);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch students" });
-    }
-  });
+  // Admin endpoints - Now proxied to Django backend
+  // app.get("/api/admin/students", async (req, res) => {
+  //   try {
+  //     const students = await storage.getAllStudentProfiles();
+  //     res.json(students);
+  //   } catch (error) {
+  //     res.status(500).json({ message: "Failed to fetch students" });
+  //   }
+  // });
 
-  app.get("/api/admin/class-overview", async (req, res) => {
-    try {
-      const overview = await storage.getClassOverview();
-      res.json(overview);
-    } catch (error) {
-      res.status(500).json({ message: "Failed to fetch class overview" });
-    }
-  });
+  // app.get("/api/admin/class-overview", async (req, res) => {
+  //   try {
+  //     const overview = await storage.getClassOverview();
+  //     res.json(overview);
+  //   } catch (error) {
+  //     res.status(500).json({ message: "Failed to fetch class overview" });
+  //   }
+  // });
 
   // Test route for auth testing
   app.get("/auth-test", (req, res) => {
