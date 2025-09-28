@@ -195,6 +195,7 @@ export default function StudentDashboard() {
           <AssessmentHistory 
             studentUsername={user?.username || ''}
             onViewDetails={handleViewAssessmentDetails}
+            backendUserId={user?.id ? Number(user.id) : undefined}
           />
         )}
         {currentView === 'historyDetail' && selectedAssessmentId && (

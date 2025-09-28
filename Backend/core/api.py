@@ -181,35 +181,29 @@ class StudentUpdateSchema(Schema):
 # Core API endpoints for student management
 @router.get("/students")
 def list_students(request):
-    """Get all students"""
-    from api_serializers import serialize_student_profile
+    """Get all students from database"""
     from core.models import StudentProfile
     from django.contrib.auth.models import User
     
-    # Return mock student data with proper serialization
-    return [
-        {
-            "id": "fb123456-1234-1234-1234-123456789012",
-            "username": "john_doe",
-            "email": "john@example.com",
-            "full_name": "John Doe",
-            "created_at": datetime.now().isoformat()
-        },
-        {
-            "id": "fb123456-1234-1234-1234-123456789013",
-            "username": "jane_smith",
-            "email": "jane@example.com", 
-            "full_name": "Jane Smith",
-            "created_at": datetime.now().isoformat()
-        },
-        {
-            "id": "fb123456-1234-1234-1234-123456789014",
-            "username": "alice_johnson",
-            "email": "alice@example.com",
-            "full_name": "Alice Johnson", 
-            "created_at": datetime.now().isoformat()
-        }
-    ]
+    try:
+        students = []
+        student_profiles = StudentProfile.objects.select_related('user').all()
+        
+        for profile in student_profiles:
+            user = profile.user
+            students.append({
+                "id": str(profile.id),
+                "username": user.username,
+                "email": user.email,
+                "full_name": user.get_full_name() or user.username,
+                "created_at": user.date_joined.isoformat()
+            })
+        
+        return students
+        
+    except Exception as e:
+        # Fallback to empty list if no students found
+        return []
 
 @router.get("/students/{student_id}", response=StudentSchema)
 def get_student(request, student_id: str):
