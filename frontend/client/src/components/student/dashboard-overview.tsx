@@ -4,6 +4,7 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Headphones, Brain, Database, Rocket, Calculator, Puzzle, BookOpen, Play, Dumbbell, Target, TrendingUp, Zap } from "lucide-react";
 import ProgressCircle from "@/components/ui/progress-circle";
+import { type StudentProfile } from "@shared/schema";
 
 type StudentView = 'dashboard' | 'adaptive' | 'modules' | 'practice' | 'history' | 'reports' | 'chapter' | 'assessment';
 
@@ -14,8 +15,13 @@ interface DashboardOverviewProps {
 export default function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
   const { user } = useAuth();
   
-  const { data: studentProfile, isLoading } = useQuery({
+  const { data: studentProfile, isLoading } = useQuery<StudentProfile>({
     queryKey: ["/api/student-profile", user?.id],
+    queryFn: async () => {
+      const response = await fetch(`/api/student-profile/${user?.id}`);
+      if (!response.ok) throw new Error('Failed to fetch student profile');
+      return response.json();
+    },
     enabled: !!user?.id,
   });
 
