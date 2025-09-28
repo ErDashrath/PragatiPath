@@ -158,33 +158,37 @@ export default function DashboardOverview({ onNavigate }: DashboardOverviewProps
               <Button
                 variant="outline"
                 className="h-auto p-4 flex flex-col items-center space-y-2 group hover:border-primary/50 transition-colors"
+                onClick={() => onNavigate('adaptive')}
                 data-testid="quick-action-assessment"
               >
                 <Play className="h-8 w-8 text-primary group-hover:scale-110 transition-transform" />
-                <span className="text-sm font-medium">Start Assessment</span>
+                <span className="text-sm font-medium">Adaptive Learning</span>
               </Button>
               
               <Button
                 variant="outline"
                 className="h-auto p-4 flex flex-col items-center space-y-2 group hover:border-secondary/50 transition-colors"
+                onClick={() => onNavigate('modules')}
                 data-testid="quick-action-practice"
               >
                 <Dumbbell className="h-8 w-8 text-secondary group-hover:scale-110 transition-transform" />
-                <span className="text-sm font-medium">Practice Mode</span>
+                <span className="text-sm font-medium">Modules</span>
               </Button>
               
               <Button
                 variant="outline"
                 className="h-auto p-4 flex flex-col items-center space-y-2 group hover:border-accent/50 transition-colors"
+                onClick={() => onNavigate('history')}
                 data-testid="quick-action-targeted"
               >
                 <Target className="h-8 w-8 text-accent group-hover:scale-110 transition-transform" />
-                <span className="text-sm font-medium">Targeted Practice</span>
+                <span className="text-sm font-medium">History</span>
               </Button>
               
               <Button
                 variant="outline"
                 className="h-auto p-4 flex flex-col items-center space-y-2 group hover:border-chart-4/50 transition-colors"
+                onClick={() => onNavigate('reports')}
                 data-testid="quick-action-progress"
               >
                 <TrendingUp className="h-8 w-8 text-chart-4 group-hover:scale-110 transition-transform" />

@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Calculator, Puzzle, BookOpen, BarChart3 } from "lucide-react";
+import { Calculator, Puzzle, BookOpen, BarChart3, Lock } from "lucide-react";
 import { AssessmentAPI, type Subject } from "@/lib/assessment-api";
 
 interface ModulesViewProps {
@@ -50,11 +50,41 @@ export default function ModulesView({ onModuleSelect }: ModulesViewProps) {
     // Mock progress data - in real app, this would come from user progress API
     const progressData: Record<string, number> = {
       'quantitative_aptitude': 68,
-      'logical_reasoning': 52,
+      'logical_reasoning': 80,
       'verbal_ability': 74,
       'data_interpretation': 61,
     };
     return progressData[subjectCode] || 0;
+  };
+
+  const getSubjectChapters = (subjectCode: string) => {
+    const chaptersData: Record<string, Array<{title: string, description: string, progress: number, questions: number, time: string}>> = {
+      'quantitative_aptitude': [
+        { title: 'Percentages', description: 'Chapter 1 of Quantitative Aptitude: Percentages', progress: 75, questions: 10, time: '15min' },
+        { title: 'Profit and Loss', description: 'Chapter 2 of Quantitative Aptitude: Profit and Loss', progress: 60, questions: 10, time: '15min' },
+        { title: 'Ratios and Proportions', description: 'Chapter 3 of Quantitative Aptitude: Ratios and Proportions', progress: 65, questions: 10, time: '15min' },
+        { title: 'Arithmetic', description: 'Chapter 4 of Quantitative Aptitude: Arithmetic', progress: 70, questions: 10, time: '15min' }
+      ],
+      'logical_reasoning': [
+        { title: 'Pattern Recognition', description: 'Chapter 1 of Logical Reasoning: Pattern Recognition', progress: 85, questions: 10, time: '15min' },
+        { title: 'Syllogisms', description: 'Chapter 2 of Logical Reasoning: Syllogisms', progress: 78, questions: 10, time: '15min' },
+        { title: 'Coding-Decoding', description: 'Chapter 3 of Logical Reasoning: Coding-Decoding', progress: 82, questions: 10, time: '15min' },
+        { title: 'Blood Relations', description: 'Chapter 4 of Logical Reasoning: Blood Relations', progress: 75, questions: 10, time: '15min' }
+      ],
+      'verbal_ability': [
+        { title: 'Vocabulary', description: 'Chapter 1 of Verbal Ability: Vocabulary', progress: 85, questions: 10, time: '15min' },
+        { title: 'Grammar', description: 'Chapter 2 of Verbal Ability: Grammar', progress: 75, questions: 10, time: '15min' },
+        { title: 'Reading Comprehension', description: 'Chapter 3 of Verbal Ability: Reading Comprehension', progress: 80, questions: 10, time: '15min' },
+        { title: 'Sentence Correction', description: 'Chapter 4 of Verbal Ability: Sentence Correction', progress: 68, questions: 10, time: '15min' }
+      ],
+      'data_interpretation': [
+        { title: 'Bar Charts', description: 'Chapter 1 of Data Interpretation: Bar Charts', progress: 70, questions: 10, time: '15min' },
+        { title: 'Line Graphs', description: 'Chapter 2 of Data Interpretation: Line Graphs', progress: 65, questions: 10, time: '15min' },
+        { title: 'Pie Charts', description: 'Chapter 3 of Data Interpretation: Pie Charts', progress: 58, questions: 10, time: '15min' },
+        { title: 'Case Studies', description: 'Chapter 4 of Data Interpretation: Case Studies', progress: 45, questions: 10, time: '15min' }
+      ]
+    };
+    return chaptersData[subjectCode] || [];
   };
 
   return (
@@ -65,40 +95,87 @@ export default function ModulesView({ onModuleSelect }: ModulesViewProps) {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {subjects?.map((subject: Subject) => {
+        {subjects?.filter((subject: Subject) => 
+          ['quantitative_aptitude', 'logical_reasoning', 'verbal_ability', 'data_interpretation'].includes(subject.code)
+        ).map((subject: Subject) => {
           const Icon = getSubjectIcon(subject.code);
           const progress = getSubjectProgress(subject.code);
+          const chapters = getSubjectChapters(subject.code);
           
           return (
             <Card
               key={subject.id}
-              className="overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer group transform hover:-translate-y-2 border-2 border-gray-200 hover:border-primary/50 h-64 bg-gradient-to-br from-white to-gray-50"
+              className="overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer group transform hover:-translate-y-2 border-2 border-gray-200 hover:border-primary/50 h-auto min-h-[500px] bg-gradient-to-br from-white to-gray-50"
               onClick={() => onModuleSelect(subject.code)}
               data-testid={`subject-card-${subject.code}`}
             >
               <div className={`h-24 flex items-center justify-center ${getSubjectGradient(subject.code)} relative`}>
                 <div className="relative bg-white/20 backdrop-blur-sm rounded-xl p-3">
-                  <Icon className="h-8 w-8 text-white" />
+                  <Icon className="h-7 w-7 text-white" />
                 </div>
               </div>
               
-              <CardContent className="p-4 h-40 flex flex-col justify-between">
-                <div className="space-y-2">
+              <CardContent className="p-5 flex flex-col justify-between flex-1">
+                <div className="space-y-3 flex-1">
                   <h3 className="text-lg font-bold text-foreground group-hover:text-primary transition-colors leading-tight">
                     {subject.name}
                   </h3>
-                  <p className="text-muted-foreground text-sm leading-relaxed line-clamp-2">
+                  <p className="text-muted-foreground text-xs leading-relaxed">
                     {subject.description}
                   </p>
+
+                  {/* Chapter/Topic List */}
+                  {chapters.length > 0 && (
+                    <div className="space-y-2 mt-3">
+                      <h4 className="text-sm font-semibold text-foreground">Topics:</h4>
+                      {chapters.map((chapter, index) => {
+                        const isLocked = index === 3; // 4th card (index 3) is locked
+                        return (
+                          <div 
+                            key={index} 
+                            className={`relative rounded-lg p-2 border transition-all duration-200 ${
+                              isLocked 
+                                ? 'bg-gray-100 border-gray-300 opacity-75 cursor-not-allowed' 
+                                : 'bg-gray-50 border-gray-200 hover:bg-primary/10 hover:border-primary/30 cursor-pointer hover:shadow-sm'
+                            }`}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (!isLocked) {
+                                onModuleSelect(`${subject.code}_${chapter.title.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '')}`);
+                              }
+                            }}
+                          >
+                            {isLocked && (
+                              <div className="absolute -top-2 -right-2 bg-gray-600 rounded-full p-1 shadow-md">
+                                <Lock className="h-3 w-3 text-white" />
+                              </div>
+                            )}
+                            <div className="flex items-center justify-between">
+                              <span className={`text-xs font-medium ${
+                                isLocked ? 'text-gray-500' : 'text-foreground hover:text-primary'
+                              }`}>
+                                {chapter.title}
+                              </span>
+                              <span className={`text-xs font-bold ${
+                                isLocked ? 'text-gray-400' : 'text-primary'
+                              }`}>
+                                {isLocked ? '--' : `${chapter.progress}%`}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
                   
-                {/* Compact Progress Bar */}
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Progress</span>
-                    <span className="text-foreground font-semibold">{progress}%</span>
+                {/* Progress Bar */}
+                <div className="space-y-3 mt-4">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground font-medium">Overall Progress</span>
+                    <span className="text-foreground font-bold">{progress}%</span>
                   </div>
-                  <div className="w-full bg-muted rounded-full h-2">
+                  <div className="w-full bg-muted rounded-full h-2.5">
                     <div 
                       className="bg-gradient-to-r from-primary to-primary/80 h-full rounded-full transition-all duration-300" 
                       style={{ width: `${progress}%` }}
@@ -107,7 +184,7 @@ export default function ModulesView({ onModuleSelect }: ModulesViewProps) {
                   </div>
                   
                   <Button 
-                    className="w-full h-8 text-sm font-semibold rounded-lg"
+                    className="w-full h-9 text-sm font-semibold rounded-lg mt-3"
                     onClick={(e) => {
                       e.stopPropagation();
                       onModuleSelect(subject.code);
@@ -127,7 +204,9 @@ export default function ModulesView({ onModuleSelect }: ModulesViewProps) {
         <CardContent className="p-12">
           <h3 className="text-3xl font-black text-foreground mb-10 text-center">Your Learning Statistics</h3>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
-            {subjects?.map((subject) => {
+            {subjects?.filter((subject) => 
+              ['quantitative_aptitude', 'logical_reasoning', 'verbal_ability', 'data_interpretation'].includes(subject.code)
+            ).map((subject) => {
               const progress = getSubjectProgress(subject.code);
               const Icon = getSubjectIcon(subject.code);
               return (

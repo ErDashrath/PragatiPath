@@ -81,7 +81,6 @@ export default function StudentDashboard() {
     { key: 'dashboard', label: 'Dashboard', active: currentView === 'dashboard' },
     { key: 'adaptive', label: 'Adaptive Learning 🧠', active: currentView === 'adaptive' },
     { key: 'modules', label: 'Modules', active: currentView === 'modules' || currentView === 'chapter' },
-    { key: 'practice', label: 'Practice', active: currentView === 'practice' },
     { key: 'history', label: 'History', active: currentView === 'history' },
     { key: 'reports', label: 'Reports', active: currentView === 'reports' },
   ];
@@ -112,8 +111,12 @@ export default function StudentDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
-              <div className="h-8 w-8 rounded-full bg-primary flex items-center justify-center">
-                <GraduationCap className="h-5 w-5 text-primary-foreground" />
+              <div className="h-8 w-8 rounded-full overflow-hidden">
+                <img 
+                  src="/logo.png" 
+                  alt="PragatiPath Logo" 
+                  className="w-full h-full object-cover"
+                />
               </div>
               <h1 className="text-xl font-bold text-foreground">PragatiPath</h1>
             </div>
@@ -205,7 +208,19 @@ export default function StudentDashboard() {
             onBack={() => setCurrentView('history')}
           />
         )}
-        {currentView === 'reports' && <ReportsView />}
+        {currentView === 'reports' && (
+          <ReportsView 
+            onNavigateToModule={(subjectCode: string) => {
+              setSelectedSubjectCode(subjectCode);
+              setCurrentView('modules');
+            }}
+            onNavigateToChapter={(subjectCode: string) => {
+              setSelectedSubjectCode(subjectCode);
+              setCurrentView('chapter');
+            }}
+            onChapterSelect={handleChapterSelect}
+          />
+        )}
       </main>
     </div>
   );

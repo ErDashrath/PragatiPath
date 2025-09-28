@@ -1,9 +1,11 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
+import { AssessmentAPI, type Subject, type Chapter } from "@/lib/assessment-api";
 import { 
   Target, 
   TrendingUp, 
@@ -33,8 +35,54 @@ import {
 
 const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
-export default function PersonalReportsView() {
+interface AssessmentConfig {
+  questionCount: number;
+  timeLimit: number;
+}
+
+interface PersonalReportsViewProps {
+  onNavigateToModule?: (subjectCode: string) => void;
+  onNavigateToChapter?: (subjectCode: string) => void;
+  onChapterSelect?: (chapter: Chapter, subject: Subject, config?: AssessmentConfig) => void;
+}
+
+export default function PersonalReportsView({ 
+  onNavigateToModule, 
+  onNavigateToChapter,
+  onChapterSelect 
+}: PersonalReportsViewProps) {
   const { user } = useAuth();
+
+  // Get subjects to find Quantitative Aptitude
+  const { data: subjects } = useQuery({
+    queryKey: ["subjects"],
+    queryFn: AssessmentAPI.getSubjects,
+  });
+
+  const quantitativeAptitudeSubject = subjects?.find(s => s.code === 'quantitative_aptitude');
+
+  // Get chapters for Quantitative Aptitude
+  const { data: chapters } = useQuery({
+    queryKey: ["chapters", quantitativeAptitudeSubject?.id],
+    queryFn: () => AssessmentAPI.getChapters(quantitativeAptitudeSubject!.id),
+    enabled: !!quantitativeAptitudeSubject?.id,
+  });
+
+  const profitAndLossChapter = chapters?.find(c => 
+    c.name.toLowerCase().includes('profit') && c.name.toLowerCase().includes('loss')
+  );
+
+  const handleStartProfitAndLossAssessment = () => {
+    if (profitAndLossChapter && quantitativeAptitudeSubject && onChapterSelect) {
+      onChapterSelect(profitAndLossChapter, quantitativeAptitudeSubject, {
+        questionCount: 10,
+        timeLimit: 15
+      });
+    } else {
+      // Fallback to chapter navigation if direct assessment isn't available
+      onNavigateToChapter?.('quantitative_aptitude');
+    }
+  };
 
   // Personal performance data
   const personalStats = {
@@ -59,24 +107,24 @@ export default function PersonalReportsView() {
   ];
 
   const subjectProgress = [
-    { name: 'Mathematics', mastery: 85, sessions: 12, lastStudied: '2 hours ago' },
-    { name: 'Physics', mastery: 72, sessions: 8, lastStudied: '1 day ago' },
-    { name: 'Chemistry', mastery: 68, sessions: 10, lastStudied: '3 hours ago' },
-    { name: 'Biology', mastery: 91, sessions: 7, lastStudied: '5 hours ago' }
+    { name: 'Quantitative Aptitude', mastery: 85, sessions: 12, lastStudied: '2 hours ago' },
+    { name: 'Logical Reasoning', mastery: 72, sessions: 8, lastStudied: '1 day ago' },
+    { name: 'Verbal Ability', mastery: 68, sessions: 10, lastStudied: '3 hours ago' },
+    { name: 'Data Interpretation', mastery: 91, sessions: 7, lastStudied: '5 hours ago' }
   ];
 
   const weakAreas = [
-    { topic: 'Organic Chemistry Reactions', accuracy: 45, priority: 'High' },
-    { topic: 'Calculus Integration', accuracy: 52, priority: 'High' },
-    { topic: 'Physics Thermodynamics', accuracy: 61, priority: 'Medium' },
-    { topic: 'Cell Biology', accuracy: 68, priority: 'Low' }
+    { topic: 'Profit and Loss', accuracy: 45, priority: 'High' },
+    { topic: 'Blood Relations', accuracy: 52, priority: 'High' },
+    { topic: 'Sentence Correction', accuracy: 61, priority: 'Medium' },
+    { topic: 'Pie Charts', accuracy: 68, priority: 'Low' }
   ];
 
   const recentActivity = [
-    { subject: 'Mathematics', chapter: 'Derivatives', score: 85, date: 'Today', correct: 17, total: 20 },
-    { subject: 'Physics', chapter: 'Mechanics', score: 72, date: 'Yesterday', correct: 14, total: 20 },
-    { subject: 'Chemistry', chapter: 'Organic Compounds', score: 68, date: '2 days ago', correct: 13, total: 19 },
-    { subject: 'Biology', chapter: 'Cell Structure', score: 94, date: '3 days ago', correct: 18, total: 19 }
+    { subject: 'Quantitative Aptitude', chapter: 'Percentages', score: 85, date: 'Today', correct: 17, total: 20 },
+    { subject: 'Logical Reasoning', chapter: 'Syllogisms', score: 72, date: 'Yesterday', correct: 14, total: 20 },
+    { subject: 'Verbal Ability', chapter: 'Reading Comprehension', score: 68, date: '2 days ago', correct: 13, total: 19 },
+    { subject: 'Data Interpretation', chapter: 'Bar Charts', score: 94, date: '3 days ago', correct: 18, total: 19 }
   ];
 
   const studyInsights = [
@@ -89,7 +137,7 @@ export default function PersonalReportsView() {
     {
       icon: <Target className="h-5 w-5 text-green-500" />,
       title: 'Best Subject',
-      value: 'Biology',
+      value: 'Data Interpretation',
       description: '91% average accuracy'
     },
     {
@@ -292,15 +340,21 @@ export default function PersonalReportsView() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="p-4 bg-white rounded-lg border">
               <CheckCircle className="h-5 w-5 text-green-500 mb-2" />
-              <div className="font-medium mb-2">Focus on Organic Chemistry</div>
+              <div className="font-medium mb-2">Focus on Profit and Loss</div>
               <div className="text-sm text-muted-foreground mb-3">
-                Your accuracy in organic reactions is 45%. Practice 20 more questions to improve.
+                Your accuracy in profit and loss problems is 45%. Practice 20 more questions to improve.
               </div>
-              <Button size="sm" className="w-full">Start Practice</Button>
+              <Button 
+                size="sm" 
+                className="w-full"
+                onClick={handleStartProfitAndLossAssessment}
+              >
+                Start Practice
+              </Button>
             </div>
             <div className="p-4 bg-white rounded-lg border">
               <TrendingUp className="h-5 w-5 text-blue-500 mb-2" />
-              <div className="font-medium mb-2">Maintain Biology Excellence</div>
+              <div className="font-medium mb-2">Maintain Data Interpretation Excellence</div>
               <div className="text-sm text-muted-foreground mb-3">
                 Great job! Keep up the 91% accuracy with regular practice sessions.
               </div>

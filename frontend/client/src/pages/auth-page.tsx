@@ -29,7 +29,7 @@ export default function AuthPage() {
       if (user.userType === 'admin') {
         navigate('/admin');
       } else {
-        navigate('/');
+        navigate('/student');
       }
     }
   }, [user, navigate]);
@@ -122,7 +122,13 @@ export default function AuthPage() {
         <div className="flex flex-col justify-center space-y-6">
           <div className="text-center space-y-6">
             <div className="space-y-2">
-              <div className="mx-auto h-12 w-12 bg-primary rounded-lg"></div>
+              <div className="mx-auto h-20 w-20 rounded-xl overflow-hidden shadow-lg">
+                <img 
+                  src="/logo.png" 
+                  alt="PragatiPath Logo" 
+                  className="w-full h-full object-cover rounded-xl"
+                />
+              </div>
             </div>
             <h1 className="text-5xl font-bold text-foreground mb-4">PragatiPath</h1>
             <p className="text-xl text-muted-foreground max-w-md">
