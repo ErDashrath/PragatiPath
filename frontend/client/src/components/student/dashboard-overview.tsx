@@ -4,7 +4,6 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Headphones, Brain, Database, Rocket, Calculator, Puzzle, BookOpen, Play, Dumbbell, Target, TrendingUp, Zap } from "lucide-react";
 import ProgressCircle from "@/components/ui/progress-circle";
-import { type StudentProfile } from "@shared/schema";
 
 type StudentView = 'dashboard' | 'adaptive' | 'modules' | 'practice' | 'history' | 'reports' | 'chapter' | 'assessment';
 
@@ -15,13 +14,8 @@ interface DashboardOverviewProps {
 export default function DashboardOverview({ onNavigate }: DashboardOverviewProps) {
   const { user } = useAuth();
   
-  const { data: studentProfile, isLoading } = useQuery<StudentProfile>({
+  const { data: studentProfile, isLoading } = useQuery({
     queryKey: ["/api/student-profile", user?.id],
-    queryFn: async () => {
-      const response = await fetch(`/api/student-profile/${user?.id}`);
-      if (!response.ok) throw new Error('Failed to fetch student profile');
-      return response.json();
-    },
     enabled: !!user?.id,
   });
 
@@ -36,44 +30,44 @@ export default function DashboardOverview({ onNavigate }: DashboardOverviewProps
     );
   }
 
-  const fundamentalsData = [
-    {
-      title: "Listening",
-      description: "Audio comprehension",
-      score: studentProfile?.listeningScore || 65,
-      icon: Headphones,
-      color: "hsl(221 83% 53%)",
-      status: (studentProfile?.listeningScore || 65) < 60 ? "critical" : 
-              (studentProfile?.listeningScore || 65) < 75 ? "needs-improvement" : "good"
-    },
-    {
-      title: "Grasping",
-      description: "Concept understanding",
-      score: studentProfile?.graspingScore || 72,
-      icon: Brain,
-      color: "hsl(178 78% 35%)",
-      status: (studentProfile?.graspingScore || 72) < 60 ? "critical" : 
-              (studentProfile?.graspingScore || 72) < 75 ? "stable" : "good"
-    },
-    {
-      title: "Retention",
-      description: "Memory & recall",
-      score: studentProfile?.retentionScore || 58,
-      icon: Database,
-      color: "hsl(43 96% 56%)",
-      status: (studentProfile?.retentionScore || 58) < 60 ? "critical" : 
-              (studentProfile?.retentionScore || 58) < 75 ? "needs-improvement" : "good"
-    },
-    {
-      title: "Application",
-      description: "Problem solving",
-      score: studentProfile?.applicationScore || 81,
-      icon: Rocket,
-      color: "hsl(142 76% 36%)",
-      status: (studentProfile?.applicationScore || 81) < 60 ? "critical" : 
-              (studentProfile?.applicationScore || 81) < 75 ? "needs-improvement" : "excellent"
-    }
-  ];
+  // const fundamentalsData = [
+  //   {
+  //     title: "Listening",
+  //     description: "Audio comprehension",
+  //     score: studentProfile?.listeningScore || 65,
+  //     icon: Headphones,
+  //     color: "hsl(221 83% 53%)",
+  //     status: (studentProfile?.listeningScore || 65) < 60 ? "critical" : 
+  //             (studentProfile?.listeningScore || 65) < 75 ? "needs-improvement" : "good"
+  //   },
+  //   {
+  //     title: "Grasping",
+  //     description: "Concept understanding",
+  //     score: studentProfile?.graspingScore || 72,
+  //     icon: Brain,
+  //     color: "hsl(178 78% 35%)",
+  //     status: (studentProfile?.graspingScore || 72) < 60 ? "critical" : 
+  //             (studentProfile?.graspingScore || 72) < 75 ? "stable" : "good"
+  //   },
+  //   {
+  //     title: "Retention",
+  //     description: "Memory & recall",
+  //     score: studentProfile?.retentionScore || 58,
+  //     icon: Database,
+  //     color: "hsl(43 96% 56%)",
+  //     status: (studentProfile?.retentionScore || 58) < 60 ? "critical" : 
+  //             (studentProfile?.retentionScore || 58) < 75 ? "needs-improvement" : "good"
+  //   },
+  //   {
+  //     title: "Application",
+  //     description: "Problem solving",
+  //     score: studentProfile?.applicationScore || 81,
+  //     icon: Rocket,
+  //     color: "hsl(142 76% 36%)",
+  //     status: (studentProfile?.applicationScore || 81) < 60 ? "critical" : 
+  //             (studentProfile?.applicationScore || 81) < 75 ? "needs-improvement" : "excellent"
+  //   }
+  // ];
 
   const getStatusText = (status: string): { text: string; className: string } => {
     switch (status) {
@@ -96,42 +90,7 @@ export default function DashboardOverview({ onNavigate }: DashboardOverviewProps
         <p className="text-muted-foreground">Here's your learning progress overview</p>
       </div>
 
-      {/* Four Fundamentals */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        {fundamentalsData.map((fundamental) => {
-          const Icon = fundamental.icon;
-          const statusInfo = getStatusText(fundamental.status);
-          
-          return (
-            <Card key={fundamental.title} className="hover:shadow-md transition-shadow" data-testid={`fundamental-${fundamental.title.toLowerCase()}`}>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
-                    <h3 className="font-semibold text-foreground">{fundamental.title}</h3>
-                    <p className="text-sm text-muted-foreground">{fundamental.description}</p>
-                  </div>
-                  <Icon className="h-8 w-8" style={{ color: fundamental.color }} />
-                </div>
-                
-                <div className="flex items-center justify-center mb-4">
-                  <ProgressCircle
-                    progress={fundamental.score}
-                    size={80}
-                    strokeWidth={6}
-                    color={fundamental.color}
-                  />
-                </div>
-                
-                <div className="text-center">
-                  <span className={`text-sm ${statusInfo.className}`}>
-                    {statusInfo.text}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
+      
 
       {/* Recent Activity and Quick Actions */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
@@ -199,33 +158,37 @@ export default function DashboardOverview({ onNavigate }: DashboardOverviewProps
               <Button
                 variant="outline"
                 className="h-auto p-4 flex flex-col items-center space-y-2 group hover:border-primary/50 transition-colors"
+                onClick={() => onNavigate('adaptive')}
                 data-testid="quick-action-assessment"
               >
                 <Play className="h-8 w-8 text-primary group-hover:scale-110 transition-transform" />
-                <span className="text-sm font-medium">Start Assessment</span>
+                <span className="text-sm font-medium">Adaptive Learning</span>
               </Button>
               
               <Button
                 variant="outline"
                 className="h-auto p-4 flex flex-col items-center space-y-2 group hover:border-secondary/50 transition-colors"
+                onClick={() => onNavigate('modules')}
                 data-testid="quick-action-practice"
               >
                 <Dumbbell className="h-8 w-8 text-secondary group-hover:scale-110 transition-transform" />
-                <span className="text-sm font-medium">Practice Mode</span>
+                <span className="text-sm font-medium">Modules</span>
               </Button>
               
               <Button
                 variant="outline"
                 className="h-auto p-4 flex flex-col items-center space-y-2 group hover:border-accent/50 transition-colors"
+                onClick={() => onNavigate('history')}
                 data-testid="quick-action-targeted"
               >
                 <Target className="h-8 w-8 text-accent group-hover:scale-110 transition-transform" />
-                <span className="text-sm font-medium">Targeted Practice</span>
+                <span className="text-sm font-medium">History</span>
               </Button>
               
               <Button
                 variant="outline"
                 className="h-auto p-4 flex flex-col items-center space-y-2 group hover:border-chart-4/50 transition-colors"
+                onClick={() => onNavigate('reports')}
                 data-testid="quick-action-progress"
               >
                 <TrendingUp className="h-8 w-8 text-chart-4 group-hover:scale-110 transition-transform" />

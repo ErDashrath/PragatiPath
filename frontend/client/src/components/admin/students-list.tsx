@@ -5,28 +5,80 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Search, Eye, UserPlus } from "lucide-react";
 
+// Type definitions for student data
+interface StudentData {
+  id: string;
+  username: string;
+  email?: string;
+  full_name?: string;
+  created_at: string;
+  last_active: string;
+  total_sessions: number;
+  completed_sessions: number;
+  accuracy: number;
+  is_active: boolean;
+  listening_score: number;
+  grasping_score: number;
+  retention_score: number;
+  application_score: number;
+  user_id?: string;
+  module_progress?: {
+    quantitative?: number;
+    logical?: number;
+    verbal?: number;
+  };
+}
+
 export default function StudentsList() {
-  const { data: students, isLoading } = useQuery({
+  const { data: students, isLoading, error } = useQuery<StudentData[]>({
     queryKey: ["/api/admin/students"],
+    retry: 1,
   });
 
-  if (isLoading) {
+  // Fallback to core students endpoint if admin endpoint fails
+  const { data: fallbackStudents, isLoading: fallbackLoading } = useQuery<StudentData[]>({
+    queryKey: ["/api/core/students"],
+    enabled: !!error,
+    retry: 1,
+  });
+
+  // Use primary data if available, otherwise fallback
+  const studentsData = students || fallbackStudents || [];
+  const loading = isLoading || (!!error && fallbackLoading);
+
+  if (loading) {
     return (
       <div className="space-y-6">
         <div className="animate-pulse">
           <div className="h-8 bg-muted rounded w-1/3 mb-2"></div>
           <div className="h-4 bg-muted rounded w-1/2"></div>
         </div>
+        <div className="text-center text-muted-foreground">
+          Loading student data from database...
+        </div>
+      </div>
+    );
+  }
+
+  if (!studentsData) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardContent className="p-6 text-center">
+            <h3 className="text-lg font-semibold text-muted-foreground mb-2">No Student Data Available</h3>
+            <p className="text-muted-foreground">Unable to load student information from the database.</p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   const getStatusBadge = (student: any) => {
     const fundamentalScores = [
-      student.listeningScore || 50,
-      student.graspingScore || 50,
-      student.retentionScore || 50,
-      student.applicationScore || 50,
+      student.listening_score || 0,
+      student.grasping_score || 0,
+      student.retention_score || 0,
+      student.application_score || 0,
     ];
     
     const avgScore = fundamentalScores.reduce((sum, score) => sum + score, 0) / 4;
@@ -42,7 +94,7 @@ export default function StudentsList() {
   };
 
   const getOverallProgress = (student: any) => {
-    const moduleProgress = student.moduleProgress || {};
+    const moduleProgress = student.module_progress || {};
     const modules = [moduleProgress.quantitative, moduleProgress.logical, moduleProgress.verbal];
     const validModules = modules.filter(score => score !== undefined);
     
@@ -60,12 +112,40 @@ export default function StudentsList() {
     return 'text-accent';
   };
 
-  const handleViewStudent = (studentId: string) => {
-    alert(`Viewing detailed profile for student: ${studentId}`);
+  const handleViewStudent = async (studentId: string) => {
+    try {
+      // Try to fetch detailed student performance data
+      const response = await fetch(`/api/admin/student-performance/${studentId}`, {
+        credentials: 'include',
+      });
+      
+      if (response.ok) {
+        const studentData = await response.json();
+        console.log('Detailed student data:', studentData);
+        
+        // Show detailed modal or navigate to student detail view
+        alert(`Student Details:\n
+Name: ${studentData.full_name || studentData.username}
+Sessions: ${studentData.total_sessions}
+Questions: ${studentData.total_questions}
+Accuracy: ${Math.round(studentData.overall_accuracy)}%
+Recent Sessions: ${studentData.recent_sessions?.length || 0}`);
+      } else {
+        alert(`Viewing detailed profile for student: ${studentId}`);
+      }
+    } catch (error) {
+      console.error('Error fetching student details:', error);
+      alert(`Viewing detailed profile for student: ${studentId}`);
+    }
   };
 
   const handleAssignWork = (studentId: string) => {
-    alert(`Assigning targeted practice for student: ${studentId}`);
+    // Future: Open modal to assign practice sessions or targeted work
+    alert(`Assigning targeted practice for student: ${studentId}\n\nFeatures coming soon:
+- Assign specific practice modules
+- Set custom difficulty levels  
+- Schedule adaptive assessments
+- Send learning recommendations`);
   };
 
   return (
@@ -134,13 +214,16 @@ export default function StudentsList() {
               </tr>
             </thead>
             <tbody className="bg-card divide-y divide-border">
-              {students?.map((student: any, index: number) => {
+              {studentsData?.map((student: any, index: number) => {
                 const overallProgress = getOverallProgress(student);
-                const initials = student.userId?.substring(0, 2).toUpperCase() || 'ST';
+                const initials = (student.user_id || student.username || student.full_name || 'Student')
+                  .substring(0, 2).toUpperCase();
+                const displayName = student.full_name || student.username || `Student ${index + 1}`;
+                const studentId = student.user_id || student.id || `student-${index}`;
                 
                 return (
                   <tr 
-                    key={student.id} 
+                    key={student.id || index} 
                     className="hover:bg-muted/30 transition-colors"
                     data-testid={`student-row-${index}`}
                   >
@@ -150,8 +233,11 @@ export default function StudentsList() {
                           <span className="text-sm font-medium text-primary">{initials}</span>
                         </div>
                         <div className="ml-3">
-                          <p className="text-sm font-medium text-foreground">Student {index + 1}</p>
-                          <p className="text-xs text-muted-foreground">ID: {student.userId?.substring(0, 8)}</p>
+                          <p className="text-sm font-medium text-foreground">{displayName}</p>
+                          <p className="text-xs text-muted-foreground">
+                            ID: {studentId.substring(0, 8)}
+                            {student.email && ` • ${student.email.split('@')[0]}`}
+                          </p>
                         </div>
                       </div>
                     </td>
@@ -166,17 +252,17 @@ export default function StudentsList() {
                         <span className="text-sm text-foreground">{overallProgress}%</span>
                       </div>
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${getScoreColor(student.listeningScore || 50)}`}>
-                      {student.listeningScore || 50}%
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${getScoreColor(student.listening_score || 0)}`}>
+                      {student.listening_score || 0}%
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${getScoreColor(student.graspingScore || 50)}`}>
-                      {student.graspingScore || 50}%
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${getScoreColor(student.grasping_score || 0)}`}>
+                      {student.grasping_score || 0}%
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${getScoreColor(student.retentionScore || 50)}`}>
-                      {student.retentionScore || 50}%
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${getScoreColor(student.retention_score || 0)}`}>
+                      {student.retention_score || 0}%
                     </td>
-                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${getScoreColor(student.applicationScore || 50)}`}>
-                      {student.applicationScore || 50}%
+                    <td className={`px-6 py-4 whitespace-nowrap text-sm ${getScoreColor(student.application_score || 0)}`}>
+                      {student.application_score || 0}%
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       {getStatusBadge(student)}
@@ -212,13 +298,16 @@ export default function StudentsList() {
 
         {/* Mobile Card View */}
         <div className="lg:hidden divide-y divide-border">
-          {students?.map((student: any, index: number) => {
+          {studentsData?.map((student: any, index: number) => {
             const overallProgress = getOverallProgress(student);
-            const initials = student.userId?.substring(0, 2).toUpperCase() || 'ST';
+            const initials = (student.user_id || student.username || student.full_name || 'Student')
+              .substring(0, 2).toUpperCase();
+            const displayName = student.full_name || student.username || `Student ${index + 1}`;
+            const studentId = student.user_id || student.id || `student-${index}`;
             
             return (
               <div 
-                key={student.id} 
+                key={student.id || index} 
                 className="p-6 space-y-4"
                 data-testid={`mobile-student-card-${index}`}
               >
@@ -228,8 +317,11 @@ export default function StudentsList() {
                       <span className="text-sm font-medium text-primary">{initials}</span>
                     </div>
                     <div className="ml-3">
-                      <p className="text-sm font-medium text-foreground">Student {index + 1}</p>
-                      <p className="text-xs text-muted-foreground">ID: {student.userId?.substring(0, 8)}</p>
+                      <p className="text-sm font-medium text-foreground">{displayName}</p>
+                      <p className="text-xs text-muted-foreground">
+                        ID: {studentId.substring(0, 8)}
+                        {student.email && <><br/>{student.email}</>}
+                      </p>
                     </div>
                   </div>
                   {getStatusBadge(student)}
@@ -252,26 +344,26 @@ export default function StudentsList() {
                   <div className="grid grid-cols-2 gap-4 text-sm">
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Listening:</span>
-                      <span className={getScoreColor(student.listeningScore || 50)}>
-                        {student.listeningScore || 50}%
+                      <span className={getScoreColor(student.listening_score || 0)}>
+                        {student.listening_score || 0}%
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Grasping:</span>
-                      <span className={getScoreColor(student.graspingScore || 50)}>
-                        {student.graspingScore || 50}%
+                      <span className={getScoreColor(student.grasping_score || 0)}>
+                        {student.grasping_score || 0}%
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Retention:</span>
-                      <span className={getScoreColor(student.retentionScore || 50)}>
-                        {student.retentionScore || 50}%
+                      <span className={getScoreColor(student.retention_score || 0)}>
+                        {student.retention_score || 0}%
                       </span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">Application:</span>
-                      <span className={getScoreColor(student.applicationScore || 50)}>
-                        {student.applicationScore || 50}%
+                      <span className={getScoreColor(student.application_score || 0)}>
+                        {student.application_score || 0}%
                       </span>
                     </div>
                   </div>
@@ -312,7 +404,7 @@ export default function StudentsList() {
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4" data-testid="class-summary">
             <div className="text-center p-4 rounded-lg bg-chart-4/10">
               <div className="text-2xl font-bold text-chart-4 mb-2">
-                {students?.filter((s: any) => getOverallProgress(s) >= 80).length || 0}
+                {studentsData?.filter((s: any) => getOverallProgress(s) >= 80).length || 0}
               </div>
               <div className="text-sm font-medium text-foreground">Excellent Students</div>
               <div className="text-xs text-muted-foreground">≥80% overall</div>
@@ -320,7 +412,7 @@ export default function StudentsList() {
             
             <div className="text-center p-4 rounded-lg bg-accent/10">
               <div className="text-2xl font-bold text-accent mb-2">
-                {students?.filter((s: any) => {
+                {studentsData?.filter((s: any) => {
                   const progress = getOverallProgress(s);
                   return progress >= 60 && progress < 80;
                 }).length || 0}
@@ -331,7 +423,7 @@ export default function StudentsList() {
             
             <div className="text-center p-4 rounded-lg bg-destructive/10">
               <div className="text-2xl font-bold text-destructive mb-2">
-                {students?.filter((s: any) => getOverallProgress(s) < 60).length || 0}
+                {studentsData?.filter((s: any) => getOverallProgress(s) < 60).length || 0}
               </div>
               <div className="text-sm font-medium text-foreground">Need Support</div>
               <div className="text-xs text-muted-foreground">&lt;60% overall</div>
@@ -339,10 +431,13 @@ export default function StudentsList() {
             
             <div className="text-center p-4 rounded-lg bg-primary/10">
               <div className="text-2xl font-bold text-primary mb-2">
-                {Math.floor((students?.reduce((sum: number, s: any) => sum + getOverallProgress(s), 0) || 0) / (students?.length || 1))}%
+                {studentsData?.length ? 
+                  Math.floor(studentsData.reduce((sum: number, s: any) => sum + getOverallProgress(s), 0) / studentsData.length) : 0}%
               </div>
               <div className="text-sm font-medium text-foreground">Class Average</div>
-              <div className="text-xs text-muted-foreground">Overall progress</div>
+              <div className="text-xs text-muted-foreground">
+                {studentsData?.length || 0} total students
+              </div>
             </div>
           </div>
         </CardContent>

@@ -133,31 +133,50 @@ export default function ChapterView({ subjectCode, onBackToModules, onChapterSel
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" data-testid="chapters-grid">
-        {chapters?.map((chapter: Chapter) => (
-          <Card
-            key={chapter.id}
-            className="hover:shadow-lg transition-all duration-300 border-2 hover:border-primary/30"
-            data-testid={`chapter-card-${chapter.id}`}
-          >
-            <CardContent className="p-6 space-y-4">
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-lg font-semibold text-foreground">
-                  {chapter.name}
-                </h3>
-                <PlayCircle className="h-6 w-6 text-primary" />
-              </div>
-              
-              <p className="text-sm text-muted-foreground mb-4 min-h-[40px]">
-                {chapter.description}
-              </p>
-              
-              <div className="space-y-4">
-                <Badge variant="outline" className="text-xs">
-                  Chapter {chapter.chapter_number}
-                </Badge>
+        {chapters?.map((chapter: Chapter) => {
+          const isLocked = chapter.chapter_number === 4; // 4th chapter is locked
+          return (
+            <Card
+              key={chapter.id}
+              className={`transition-all duration-300 border-2 relative ${
+                isLocked 
+                  ? 'opacity-75 border-gray-300 cursor-not-allowed' 
+                  : 'hover:shadow-lg hover:border-primary/30'
+              }`}
+              data-testid={`chapter-card-${chapter.id}`}
+            >
+              {isLocked && (
+                <div className="absolute -top-3 -right-3 bg-gray-600 rounded-full p-2 shadow-lg z-10">
+                  <Lock className="h-4 w-4 text-white" />
+                </div>
+              )}
+              <CardContent className="p-6 space-y-4">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className={`text-lg font-semibold ${
+                    isLocked ? 'text-gray-500' : 'text-foreground'
+                  }`}>
+                    {chapter.name}
+                  </h3>
+                  <PlayCircle className={`h-6 w-6 ${
+                    isLocked ? 'text-gray-400' : 'text-primary'
+                  }`} />
+                </div>
+                
+                <p className={`text-sm mb-4 min-h-[40px] ${
+                  isLocked ? 'text-gray-400' : 'text-muted-foreground'
+                }`}>
+                  {chapter.description}
+                </p>
+                
+                <div className="space-y-4">
+                  <Badge variant="outline" className={`text-xs ${
+                    isLocked ? 'border-gray-300 text-gray-400' : ''
+                  }`}>
+                    Chapter {chapter.chapter_number}
+                  </Badge>
 
-                {/* Assessment Configuration */}
-                {showConfig === chapter.id ? (
+                  {/* Assessment Configuration */}
+                  {!isLocked && showConfig === chapter.id ? (
                   <div className="space-y-4 p-4 bg-muted/30 rounded-lg">
                     <div className="flex items-center gap-2 mb-3">
                       <Settings className="h-4 w-4 text-primary" />
@@ -228,33 +247,50 @@ export default function ChapterView({ subjectCode, onBackToModules, onChapterSel
                       </Button>
                     </div>
                   </div>
-                ) : (
-                  <div className="space-y-2">
-                    <div className="flex items-center justify-between text-xs text-muted-foreground">
-                      <span className="flex items-center gap-1">
-                        <HelpCircle className="h-3 w-3" />
-                        Questions: {questionCount}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Clock className="h-3 w-3" />
-                        Time: {timeLimit}min
-                      </span>
+                  ) : !isLocked ? (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <span className="flex items-center gap-1">
+                          <HelpCircle className="h-3 w-3" />
+                          Questions: {questionCount}
+                        </span>
+                        <span className="flex items-center gap-1">
+                          <Clock className="h-3 w-3" />
+                          Time: {timeLimit}min
+                        </span>
+                      </div>
+                      
+                      <Button
+                        size="sm"
+                        className="w-full h-8 text-xs"
+                        onClick={() => setShowConfig(chapter.id)}
+                        data-testid={`button-configure-chapter-${chapter.id}`}
+                      >
+                        Configure & Start
+                      </Button>
                     </div>
-                    
-                    <Button
-                      size="sm"
-                      className="w-full h-8 text-xs"
-                      onClick={() => setShowConfig(chapter.id)}
-                      data-testid={`button-configure-chapter-${chapter.id}`}
-                    >
-                      Configure & Start
-                    </Button>
-                  </div>
-                )}
-              </div>
-            </CardContent>
-          </Card>
-        ))}
+                  ) : (
+                    <div className="space-y-2">
+                      <div className="flex items-center justify-center text-xs text-gray-400 py-2">
+                        <Lock className="h-3 w-3 mr-1" />
+                        Complete previous chapters to unlock
+                      </div>
+                      
+                      <Button
+                        size="sm"
+                        className="w-full h-8 text-xs"
+                        disabled
+                        variant="secondary"
+                      >
+                        Locked
+                      </Button>
+                    </div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          );
+        })}
       </div>
 
       {/* Chapter Information */}

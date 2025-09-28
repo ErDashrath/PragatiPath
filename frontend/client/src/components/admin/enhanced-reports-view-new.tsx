@@ -26,52 +26,33 @@ import {
   ResponsiveContainer
 } from 'recharts';
 
-type ReportsTab = 'system' | 'students' | 'sessions' | 'performance';
-
 // Type definitions for API responses
-interface SystemStatsResponse {
-  users: {
+interface SystemStats {
+  users?: {
     total: number;
     students: number;
     active_week: number;
   };
-  sessions: {
+  sessions?: {
     total: number;
     today: number;
     week: number;
     month: number;
   };
-  questions: {
+  questions?: {
     total: number;
     today: number;
   };
-  subjects: Array<{
+  subjects?: Array<{
     name: string;
     sessions: number;
     questions_attempted: number;
     accuracy: number;
   }>;
-  last_updated: string;
+  last_updated?: string;
 }
 
-interface ClassOverviewResponse {
-  totalStudents: number;
-  activeThisWeek: number;
-  totalSessions: number;
-  completedSessions: number;
-  averageAccuracy: number;
-  recentActivity: number;
-  total_students: number;
-  average_progress: number;
-  completion_rate: number;
-  retention_rate: number;
-  weekly_study_hours: number;
-  struggling_students: number;
-  improving_students: number;
-  excellent_students: number;
-}
-
-interface StudentDataResponse {
+interface Student {
   id: string;
   username: string;
   email: string;
@@ -88,22 +69,42 @@ interface StudentDataResponse {
   application_score: number;
 }
 
+interface ClassOverview {
+  totalStudents?: number;
+  activeThisWeek?: number;
+  totalSessions?: number;
+  completedSessions?: number;
+  averageAccuracy?: number;
+  recentActivity?: number;
+  lastUpdated?: string;
+  total_students?: number;
+  average_progress?: number;
+  completion_rate?: number;
+  retention_rate?: number;
+  weekly_study_hours?: number;
+  struggling_students?: number;
+  improving_students?: number;
+  excellent_students?: number;
+}
+
+type ReportsTab = 'system' | 'students' | 'sessions' | 'performance';
+
 export default function EnhancedReportsView() {
   const [activeTab, setActiveTab] = useState<ReportsTab>('system');
   const [lastRefresh, setLastRefresh] = useState(new Date());
   
-  // Use working admin API endpoints with proper typing
-  const { data: systemStats, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useQuery<SystemStatsResponse>({
+  // Use working admin API endpoints
+  const { data: systemStats, isLoading: statsLoading, error: statsError, refetch: refetchStats } = useQuery<SystemStats>({
     queryKey: ["/api/admin/system-stats"],
     retry: 2,
   });
 
-  const { data: studentsData, isLoading: studentsLoading, error: studentsError, refetch: refetchStudents } = useQuery<StudentDataResponse[]>({
+  const { data: studentsData, isLoading: studentsLoading, error: studentsError, refetch: refetchStudents } = useQuery<Student[]>({
     queryKey: ["/api/admin/students"],
     retry: 2,
   });
 
-  const { data: classOverview, isLoading: overviewLoading, error: overviewError, refetch: refetchOverview } = useQuery<ClassOverviewResponse>({
+  const { data: classOverview, isLoading: overviewLoading, error: overviewError, refetch: refetchOverview } = useQuery<ClassOverview>({
     queryKey: ["/api/admin/class-overview"],
     retry: 2,
   });
@@ -131,7 +132,7 @@ export default function EnhancedReportsView() {
 
   const getStudentPerformanceData = () => {
     if (!studentsData || !Array.isArray(studentsData)) return [];
-    return studentsData.slice(0, 10).map((student, index) => {
+    return studentsData.slice(0, 10).map((student, index: number) => {
       const avgScore = Math.round((
         (student.listening_score || 0) + 
         (student.grasping_score || 0) + 
@@ -546,7 +547,7 @@ export default function EnhancedReportsView() {
                   
                   <div className="text-center p-4 bg-primary/10 rounded-lg">
                     <div className="text-lg font-bold text-primary mb-1">
-                      {studentsData?.length || 0}
+                      {(studentsData && Array.isArray(studentsData)) ? studentsData.length : 0}
                     </div>
                     <div className="text-sm text-muted-foreground">Total Students Tracked</div>
                   </div>

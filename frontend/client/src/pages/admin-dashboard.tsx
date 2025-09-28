@@ -58,8 +58,12 @@ export default function AdminDashboard() {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-4">
-              <div className="h-8 w-8 rounded-full bg-secondary flex items-center justify-center">
-                <GraduationCap className="h-5 w-5 text-secondary-foreground" />
+              <div className="h-8 w-8 rounded-full overflow-hidden">
+                <img 
+                  src="/logo.png" 
+                  alt="PragatiPath Logo" 
+                  className="w-full h-full object-cover"
+                />
               </div>
               <h1 className="text-xl font-bold text-foreground">PragatiPath Admin</h1>
             </div>
