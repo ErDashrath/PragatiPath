@@ -15,7 +15,7 @@ id,question_text,option_a,option_b,option_c,option_d,answer,difficulty,tags
 14,"Find the next term in the series: SCD, TEF, UGH, ?, WKL","VIJ","VJI","IJV","IJT","a","Moderate","Pattern Recognition"
 15,"Find the next number in the series: 0, 6, 24, 60, 120, ?","180","210","240","220","b","Moderate","Pattern Recognition"
 16,"Complete the series: 589654237, 89654237, 8965423, 965423, ?","65423","96542","95423","69542","b","Easy","Pattern Recognition"
-1<strong>"Choose the term that completes the analogy: 42 : 56 :: 110 : ?","132","136","140","144","a","Moderate","Pattern Recognition"</strong>
+17,"Choose the term that completes the analogy: 42 : 56 :: 110 : ?","132","136","140","144","a","Moderate","Pattern Recognition"
 18,"Find the next term: F2, ?, D8, C16, B32","A16","G4","E4","E3","c","Moderate","Pattern Recognition"
 19,"Find the missing number: 1, 4, 27, 16, ?, 36, 343","25","81","125","64","c","Moderate","Pattern Recognition"
 20,"Complete the series: AB, DEF, HIJK, ?, STUVWX","LMNO","LMNOP","MNOPQ","QRSTU","c","Moderate","Pattern Recognition"

@@ -161,6 +161,67 @@ export interface AdaptiveHealthResponse {
   ready_for_frontend: boolean;
 }
 
+// Unified Practice History interfaces
+export interface UnifiedPracticeSession {
+  session_id: string;
+  type: 'practice';
+  subject: string;
+  session_date: string;
+  stage: string;
+  ease_factor: number;
+  interval_days: number;
+  repetitions: number;
+  success_rate: number;
+  total_reviews: number;
+  mastery_level: string;
+  mastery_score: number;
+  question_text: string;
+  next_review: string | null;
+  is_due: boolean;
+  priority_score: number;
+}
+
+export interface UnifiedAdaptiveSession {
+  session_id: string;
+  type: 'adaptive';
+  subject: string;
+  session_date: string;
+  duration_minutes: number;
+  questions_attempted: number;
+  questions_correct: number;
+  accuracy: string;
+  mastery_scores: {
+    bkt_mastery: string;
+    bkt_mastery_raw: number;
+    dkt_prediction: string;
+    dkt_prediction_raw: number;
+    mastery_level: string;
+  };
+  session_summary: string;
+  adaptive_info: {
+    difficulty_progression: string[];
+    mastery_progression: number[];
+    final_difficulty: string;
+  };
+}
+
+export interface UnifiedPracticeHistory {
+  success: boolean;
+  student_id: string;
+  student_name: string;
+  total_sessions: number;
+  practice_sessions: UnifiedPracticeSession[];
+  adaptive_sessions: UnifiedAdaptiveSession[];
+  combined_sessions: (UnifiedPracticeSession | UnifiedAdaptiveSession)[];
+  summary_stats: {
+    total_practice_cards: number;
+    total_adaptive_sessions: number;
+    practice_mastery_avg: number;
+    adaptive_mastery_avg: number;
+  };
+  learning_insights: string[];
+}
+
 // Adaptive Learning API client
 export class AdaptiveLearningAPI {
   
@@ -364,6 +425,38 @@ export class AdaptiveLearningAPI {
     }
     
     return response.json();
+  }
+
+  /**
+   * Get unified practice history (SM-2 + Adaptive Learning)
+   * This fixes the fetching problem by bridging practice and adaptive learning systems
+   */
+  static async getUnifiedPracticeHistory(userId: number): Promise<UnifiedPracticeHistory> {
+    console.log('🔍 Fetching unified practice history for user:', userId);
+    console.log('📍 Making request to:', `${ADAPTIVE_API_BASE}/practice-history/${userId}/`);
+    
+    const response = await fetch(`${ADAPTIVE_API_BASE}/practice-history/${userId}/`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    
+    console.log('📊 Unified practice history response status:', response.status);
+    
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('❌ Unified practice history error:', error);
+      throw new Error(error.message || 'Failed to get unified practice history');
+    }
+    
+    const result = await response.json();
+    console.log('✅ Unified practice history loaded:', {
+      total_sessions: result.total_sessions,
+      practice_sessions: result.practice_sessions?.length,
+      adaptive_sessions: result.adaptive_sessions?.length,
+      insights: result.learning_insights?.length
+    });
+    
+    return result;
   }
 }
 

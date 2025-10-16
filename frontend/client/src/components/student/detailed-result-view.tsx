@@ -48,20 +48,31 @@ export function DetailedResultView({ studentUsername, sessionId, onBack }: Detai
       
       // First try the regular assessment API
       try {
+        console.log('🚀 ATTEMPTING PRIMARY PATH: HistoryAPI.getDetailedAssessmentResult');
         const data = await HistoryAPI.getDetailedAssessmentResult(studentUsername, sessionId);
-        console.log('✅ Regular assessment API worked:', data);
+        console.log('✅ PRIMARY PATH SUCCESS - Regular assessment API worked:', data);
+        
+        // Check if this data has proper difficulty information
+        if (data.question_attempts && data.question_attempts.length > 0) {
+          const firstQ = data.question_attempts[0];
+          console.log('🔍 PRIMARY PATH - First question difficulty check:', {
+            difficulty: firstQ.difficulty,
+            difficulty_level: firstQ.difficulty_level
+          });
+        }
+        
         setResult(data);
         return;
       } catch (regularApiError) {
-        console.log('⚠️ Regular assessment API failed, trying adaptive session API...', regularApiError);
+        console.log('❌ PRIMARY PATH FAILED - Regular assessment API failed, trying adaptive session API...', regularApiError);
       }
       
       // If regular API fails, try to get adaptive session details with REAL question data
       try {
-        console.log('🔄 Trying adaptive session details endpoint...');
+        console.log('� ATTEMPTING FALLBACK PATH: session-details API');
         // Try the existing session-details endpoint for adaptive sessions
         const adaptiveDetailResponse = await fetch(`/history/session-details/${sessionId}/`);
-        console.log('📡 Adaptive detail response status:', adaptiveDetailResponse.status);
+        console.log('📡 FALLBACK PATH - Adaptive detail response status:', adaptiveDetailResponse.status);
         
         if (adaptiveDetailResponse.ok) {
           const adaptiveDetailData = await adaptiveDetailResponse.json();
@@ -73,29 +84,33 @@ export function DetailedResultView({ studentUsername, sessionId, onBack }: Detai
                 const sessionDetails = adaptiveDetailData.session_details;
                 const questionAttempts = sessionDetails.question_attempts || [];
                 
-                // Calculate difficulty performance from actual question attempts
-                const difficultyStats: Record<string, { correct: number; total: number; accuracy: number }> = {
-                  'Easy': { correct: 0, total: 0, accuracy: 0 },
-                  'Medium': { correct: 0, total: 0, accuracy: 0 },
-                  'Hard': { correct: 0, total: 0, accuracy: 0 }
-                };
+                // Debug: Check first question attempt structure
+                if (questionAttempts.length > 0) {
+                  console.log('🔍 First question attempt structure:', questionAttempts[0]);
+                  console.log('🔍 Available fields:', Object.keys(questionAttempts[0]));
+                }
                 
-                // Process question attempts to get difficulty breakdown
+                // Calculate difficulty performance from actual question attempts - USING REAL DATABASE TAGS
+                const difficultyStats: Record<string, { correct: number; total: number; accuracy: number }> = {};
+                console.log('🎯 Using REAL database difficulty tags (no hardcoded mapping)');
+                
+                // Process question attempts to get difficulty breakdown - USING REAL DATABASE TAGS
                 questionAttempts.forEach((attempt: any) => {
-                  const difficulty = attempt.difficulty || 'easy';
-                  let mappedDifficulty = 'Medium'; // default
+                  const difficulty = attempt.difficulty || attempt.difficulty_level || 'unknown';
+                  console.log(`🔍 DetailedResultView processing REAL difficulty: '${difficulty}' for Q${attempt.question_number}`);
                   
-                  if (difficulty.toLowerCase().includes('easy') || difficulty.toLowerCase() === 'very_easy') {
-                    mappedDifficulty = 'Easy';
-                  } else if (difficulty.toLowerCase().includes('moderate')) {
-                    mappedDifficulty = 'Medium';
-                  } else if (difficulty.toLowerCase().includes('difficult') || difficulty.toLowerCase().includes('hard')) {
-                    mappedDifficulty = 'Hard';
+                  // Use the REAL difficulty tag from database (no mapping!)
+                  const realDifficulty = difficulty;
+                  console.log(`✅ Using REAL database tag: '${realDifficulty}'`);
+                  
+                  // Initialize the real difficulty category if not exists
+                  if (!difficultyStats[realDifficulty]) {
+                    difficultyStats[realDifficulty] = { correct: 0, total: 0, accuracy: 0 };
                   }
                   
-                  difficultyStats[mappedDifficulty].total += 1;
+                  difficultyStats[realDifficulty].total += 1;
                   if (attempt.is_correct) {
-                    difficultyStats[mappedDifficulty].correct += 1;
+                    difficultyStats[realDifficulty].correct += 1;
                   }
                 });
                 

@@ -290,8 +290,8 @@ export default function AdaptiveLearningInterface({
   if (phase === 'config') {
     return (
       <SessionConfig
-        title="Configure Adaptive Learning"
-        description="Set up your adaptive learning session. Choose the number of questions, time limit, and initial difficulty level. The AI will adapt the difficulty based on your performance."
+        title="Configure Personalized Learning"
+        description="Set up your personalized learning session. Choose the number of questions, time limit, and initial difficulty level. The AI will adapt the difficulty based on your performance."
         onStartSession={handleStartSession}
         onCancel={onBack}
       />

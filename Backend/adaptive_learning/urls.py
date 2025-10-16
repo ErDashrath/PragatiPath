@@ -108,6 +108,7 @@ urlpatterns = [
     path('simple/complete-session/', simple_frontend_api.complete_session, name='complete_session'),
     path('simple/session-progress/<str:session_id>/', simple_frontend_api.get_session_progress, name='get_session_progress'),
     path('simple/session-history/<str:student_id>/', simple_frontend_api.get_session_history, name='get_session_history'),
+    path('simple/practice-history/<str:student_id>/', simple_frontend_api.get_unified_practice_history, name='get_unified_practice_history'),
     path('simple/health/', simple_frontend_api.api_health, name='simple_api_health'),
     # Enhanced History API Endpoints
     path('history/student/<str:username>/', enhanced_history_api.get_student_session_history, name='student_session_history'),
