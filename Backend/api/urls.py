@@ -17,6 +17,10 @@ Date: 2024-12-26
 
 from django.urls import path, include
 from api import frontend_api
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+import enhanced_exam_session_api
 
 # Authentication URLs
 auth_patterns = [
@@ -58,6 +62,13 @@ enhanced_exam_patterns = [
     path('admin/exams/<str:exam_id>/end/', frontend_api.end_exam_manual, name='end_exam_manual'),
     path('admin/subjects/with-ids/', frontend_api.get_subjects_with_ids, name='get_subjects_with_ids'),
     path('student/<str:student_id>/exams/scheduled/', frontend_api.get_student_scheduled_exams, name='get_student_scheduled_exams'),
+    
+    # NEW: Enhanced Exam Session Management (Student Exam Taking with Adaptive Learning)
+    path('exams/<str:exam_id>/join/', enhanced_exam_session_api.join_enhanced_exam, name='join_enhanced_exam'),
+    path('sessions/<str:session_id>/question/', enhanced_exam_session_api.get_exam_question, name='get_enhanced_exam_question'),
+    path('sessions/<str:session_id>/submit-answer/', enhanced_exam_session_api.submit_exam_answer, name='submit_enhanced_exam_answer'),
+    path('sessions/<str:session_id>/submit/', enhanced_exam_session_api.submit_exam, name='submit_enhanced_exam'),
+    path('sessions/<str:session_id>/results/', enhanced_exam_session_api.get_exam_results, name='get_enhanced_exam_results'),
 ]
 
 # Main API v1 URL patterns

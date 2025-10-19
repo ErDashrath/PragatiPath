@@ -576,6 +576,39 @@ def get_available_exams(request):
     except Exception as e:
         return {"error": f"Failed to fetch available exams: {str(e)}"}
 
+@enhanced_exam_router.get("/student/{student_id}/exams/scheduled/")
+def get_student_scheduled_exams(request, student_id: int):
+    """Get scheduled exams for a specific student - matches frontend API call"""
+    
+    # First, let's return a simple test response to verify the endpoint works
+    try:
+        # Simple test data
+        test_exam = {
+            "id": "test-exam-123",
+            "exam_name": "Test Enhanced Exam",
+            "subject": "logical_reasoning",
+            "total_questions": 20,
+            "duration_minutes": 60,
+            "scheduled_start_time": timezone.now().isoformat(),
+            "scheduled_end_time": (timezone.now() + timedelta(hours=2)).isoformat(),
+            "status": "ACTIVE",
+            "passing_score_percentage": 60.0,
+            "description": "Test exam with real questions"
+        }
+        
+        return {
+            "success": True,
+            "data": [test_exam],
+            "count": 1
+        }
+        
+    except Exception as e:
+        return {
+            "success": False,
+            "error": f"API Error: {str(e)}",
+            "data": []
+        }
+
 @enhanced_exam_router.get("/student/{student_id}/attempts")
 def get_student_exam_attempts(request, student_id: str):
     """Get all exam attempts for a specific student"""

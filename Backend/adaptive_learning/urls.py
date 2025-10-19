@@ -29,6 +29,9 @@ import enhanced_history_api_fixed as enhanced_history_api
 # Import adaptive session API
 from assessment import adaptive_session_api
 
+# Import enhanced exam session API
+import enhanced_exam_session_api
+
 # Import admin API
 import admin_api
 
@@ -57,6 +60,9 @@ from exam_management_api import exam_router
 
 # Import enhanced exam management API (NEW)
 from enhanced_exam_management_api import enhanced_exam_router
+
+# Import enhanced exam session API (NEW) - Student exam taking with adaptive learning
+import enhanced_exam_session_api
 
 # Create the main API instance with enhanced configuration
 api = NinjaAPI(
@@ -131,6 +137,13 @@ urlpatterns = [
     path('adaptive-session/student-mastery/<int:student_id>/', adaptive_session_api.get_student_mastery, name='get_student_mastery'),
     path('adaptive-session/available-subjects/', adaptive_session_api.get_available_subjects, name='get_available_subjects'),
     path('adaptive-session/end-session/<str:session_id>/', adaptive_session_api.end_session, name='end_session'),
+    
+    # Enhanced Exam Session API Endpoints (NEW) - Student exam taking with adaptive learning integration
+    path('enhanced-exam-session/join/<str:exam_id>/', enhanced_exam_session_api.join_enhanced_exam, name='join_enhanced_exam'),
+    path('enhanced-exam-session/question/<str:session_id>/', enhanced_exam_session_api.get_exam_question, name='get_enhanced_exam_question'),
+    path('enhanced-exam-session/submit-answer/<str:session_id>/', enhanced_exam_session_api.submit_exam_answer, name='submit_enhanced_exam_answer'),
+    path('enhanced-exam-session/submit/<str:session_id>/', enhanced_exam_session_api.submit_exam, name='submit_enhanced_exam'),
+    path('enhanced-exam-session/results/<str:session_id>/', enhanced_exam_session_api.get_exam_results, name='get_enhanced_exam_results'),
 ]
 
 # Serve media files during development

@@ -13,7 +13,7 @@ import { AssessmentHistory } from "@/components/student/assessment-history";
 import { DetailedResultView } from "@/components/student/detailed-result-view";
 import AdaptiveLearningInterface from "@/components/student/adaptive-learning-interface";
 import ScheduledExamsView from "@/components/student/scheduled-exams-view";
-import TimedExamInterface from "@/components/student/timed-exam-interface";
+import EnhancedExamInterface from "@/components/student/EnhancedExamInterface";
 import DynamicExamInterface from "@/components/student/dynamic-exam-interface";
 import EnhancedExamSelector from "@/components/student/enhanced-exam-selector";
 import ExamDebugComponent from "@/components/debug/exam-debug";
@@ -206,7 +206,16 @@ export default function StudentDashboard() {
                 </Sheet>
               </div>
               
-              <div className="flex items-center space-x-2">
+              <div className="flex items-center space-x-4">
+                {/* Quick Admin Switch for Demo */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => navigate('/admin')}
+                  className="bg-blue-50 hover:bg-blue-100 border-blue-300"
+                >
+                  🔐 Admin View
+                </Button>
                 <Button
                   variant="ghost"
                   size="sm"
@@ -287,13 +296,8 @@ export default function StudentDashboard() {
             onExamExit={handleDynamicExamExit}
           />
         )}
-        {currentView === 'timedExam' && currentExamSessionId && (
-          <TimedExamInterface
-            sessionId={currentExamSessionId}
-            examName={currentExamName}
-            onExamComplete={handleExamComplete}
-            onExamExit={handleExamExit}
-          />
+        {currentView === 'timedExam' && (
+          <EnhancedExamInterface />
         )}
         {currentView === 'reports' && (
           <ReportsView 

@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Exam System - Real Questions Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        .status-panel {
+            background: #f8f9fa;
+            padding: 15px;
+            border-bottom: 1px solid #e9ecef;
+        }
+        
+        .status-item {
+            display: inline-block;
+            margin: 5px 10px;
+            padding: 5px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .status-success { background: #d4edda; color: #155724; }
+        .status-warning { background: #fff3cd; color: #856404; }
+        .status-error { background: #f8d7da; color: #721c24; }
+        
+        .exam-list {
+            padding: 20px;
+        }
+        
+        .exam-card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            margin: 10px 0;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        
+        .exam-card:hover {
+            background: #f8f9fa;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0,0,0,0.1);
+        }
+        
+        .exam-session {
+            padding: 20px;
+            display: none;
+        }
+        
+        .question-container {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .question-text {
+            font-size: 18px;
+            font-weight: 600;
+            margin-bottom: 20px;
+            line-height: 1.5;
+        }
+        
+        .options-container {
+            margin: 20px 0;
+        }
+        
+        .option {
+            background: white;
+            border: 2px solid #e9ecef;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 10px 0;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .option:hover {
+            border-color: #007bff;
+            background: #f0f8ff;
+        }
+        
+        .option.selected {
+            border-color: #28a745;
+            background: #d4edda;
+        }
+        
+        .progress-bar {
+            background: #e9ecef;
+            height: 8px;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 15px 0;
+        }
+        
+        .progress-fill {
+            background: linear-gradient(90deg, #28a745, #20c997);
+            height: 100%;
+            transition: width 0.3s ease;
+        }
+        
+        .btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            transition: background 0.2s ease;
+        }
+        
+        .btn:hover { background: #0056b3; }
+        .btn:disabled { background: #6c757d; cursor: not-allowed; }
+        
+        .btn-success { background: #28a745; }
+        .btn-success:hover { background: #218838; }
+        
+        .btn-danger { background: #dc3545; }
+        .btn-danger:hover { background: #c82333; }
+        
+        .mastery-info {
+            background: linear-gradient(135deg, #6f42c1, #e83e8c);
+            color: white;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 15px 0;
+        }
+        
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #3498db;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .alert {
+            padding: 15px;
+            margin: 15px 0;
+            border-radius: 6px;
+            font-weight: 500;
+        }
+        
+        .alert-success { background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .alert-error { background: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; }
+        .alert-info { background: #d1ecf1; color: #0c5460; border: 1px solid #bee5eb; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎓 Enhanced Exam System - Real Questions Demo</h1>
+            <p>Demonstrating backend integration with real database questions</p>
+        </div>
+        
+        <div class="status-panel">
+            <div class="status-item status-warning" id="backendStatus">⏳ Checking Backend...</div>
+            <div class="status-item status-warning" id="examApiStatus">⏳ Checking API...</div>
+            <div class="status-item status-warning" id="questionsStatus">⏳ Checking Questions...</div>
+        </div>
+        
+        <!-- Exam List View -->
+        <div id="examsList" class="exam-list">
+            <h2>Available Scheduled Exams</h2>
+            <div class="loading">
+                <div class="spinner"></div>
+                <p>Loading available exams...</p>
+            </div>
+        </div>
+        
+        <!-- Exam Session View -->
+        <div id="examSession" class="exam-session">
+            <div class="alert alert-info">
+                <strong>🎯 Exam Started:</strong> <span id="examTitle">Unknown Exam</span><br>
+                <strong>📊 Adaptive Learning:</strong> BKT algorithm is selecting optimal questions based on your performance
+            </div>
+            
+            <div class="progress-bar">
+                <div class="progress-fill" id="progressBar" style="width: 0%"></div>
+            </div>
+            <div id="progressText">Question 0 of 0</div>
+            
+            <div class="question-container" id="questionContainer">
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p id="loadingText">Loading your next adaptive question...</p>
+                </div>
+            </div>
+            
+            <div class="mastery-info" id="masteryInfo" style="display: none;">
+                <strong>🧠 Current Mastery:</strong> <span id="masteryLevel">0%</span><br>
+                <strong>📈 Difficulty:</strong> <span id="difficultyLevel">Unknown</span>
+            </div>
+            
+            <div style="text-align: center; margin: 20px 0;">
+                <button class="btn btn-danger" onclick="exitExam()">Exit Exam</button>
+                <button class="btn btn-success" id="submitBtn" onclick="submitAnswer()" disabled>Submit Answer</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentSession = null;
+        let currentQuestion = null;
+        let selectedAnswer = null;
+
+        // Check system status
+        async function checkSystemStatus() {
+            try {
+                // Test backend connectivity
+                const response = await fetch('http://127.0.0.1:8000/api/v1/enhanced-exam/student/1/exams/scheduled/');
+                if (response.ok) {
+                    document.getElementById('backendStatus').innerHTML = '<span style="color: green;">✅ Backend Connected</span>';
+                    document.getElementById('backendStatus').className = 'status-item status-success';
+                    
+                    // Test enhanced exam API
+                    const data = await response.json();
+                    if (data.success) {
+                        document.getElementById('examApiStatus').innerHTML = '<span style="color: green;">✅ Enhanced Exam API Working</span>';
+                        document.getElementById('examApiStatus').className = 'status-item status-success';
+                        
+                        document.getElementById('questionsStatus').innerHTML = `<span style="color: green;">✅ ${data.data.length} Exams Available</span>`;
+                        document.getElementById('questionsStatus').className = 'status-item status-success';
+                        
+                        return true;
+                    }
+                }
+                throw new Error('API not responding');
+            } catch (error) {
+                document.getElementById('backendStatus').innerHTML = '<span style="color: red;">❌ Backend Error</span>';
+                document.getElementById('backendStatus').className = 'status-item status-error';
+                document.getElementById('examApiStatus').innerHTML = '<span style="color: red;">❌ API Error</span>';
+                document.getElementById('examApiStatus').className = 'status-item status-error';
+                document.getElementById('questionsStatus').innerHTML = '<span style="color: red;">❌ No Questions</span>';
+                document.getElementById('questionsStatus').className = 'status-item status-error';
+                return false;
+            }
+        }
+
+        // Load available scheduled exams
+        async function loadScheduledExams() {
+            try {
+                const response = await fetch('http://127.0.0.1:8000/api/v1/enhanced-exam/student/1/exams/scheduled/');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.data.length > 0) {
+                        displayExams(data.data);
+                    } else {
+                        document.getElementById('examsList').innerHTML = `
+                            <div class="alert alert-info">
+                                <strong>📅 No Active Exams</strong><br>
+                                No scheduled exams are currently available for you.
+                            </div>`;
+                    }
+                } else {
+                    throw new Error('Failed to load exams');
+                }
+            } catch (error) {
+                document.getElementById('examsList').innerHTML = `
+                    <div class="alert alert-error">
+                        <strong>❌ Error Loading Exams</strong><br>
+                        ${error.message}
+                    </div>`;
+            }
+        }
+
+        // Display available exams
+        function displayExams(exams) {
+            let html = '<h2>📋 Available Scheduled Exams</h2>';
+            
+            exams.forEach(exam => {
+                const statusColor = exam.status === 'ACTIVE' ? 'green' : 
+                                  exam.status === 'SCHEDULED' ? 'orange' : 'gray';
+                
+                html += `
+                    <div class="exam-card" onclick="startExam('${exam.id}', '${exam.exam_name}')">
+                        <h3>${exam.exam_name}</h3>
+                        <p><strong>Subject:</strong> ${exam.subject}</p>
+                        <p><strong>Questions:</strong> ${exam.total_questions} | <strong>Duration:</strong> ${exam.duration_minutes} minutes</p>
+                        <p><strong>Status:</strong> <span style="color: ${statusColor}; font-weight: bold;">${exam.status}</span></p>
+                        ${exam.description ? `<p><em>${exam.description}</em></p>` : ''}
+                        <div style="margin-top: 10px;">
+                            <button class="btn ${exam.status === 'ACTIVE' ? 'btn-success' : ''}" 
+                                    ${exam.status !== 'ACTIVE' ? 'disabled' : ''}>
+                                ${exam.status === 'ACTIVE' ? '🚀 Start Exam' : '⏳ ' + exam.status}
+                            </button>
+                        </div>
+                    </div>`;
+            });
+            
+            document.getElementById('examsList').innerHTML = html;
+        }
+
+        // Start exam
+        async function startExam(examId, examName) {
+            try {
+                console.log(`🚀 Starting exam: ${examName} (ID: ${examId})`);
+                
+                const response = await fetch(`/enhanced-exam-session/join/${examId}/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        student_id: 1  // Use student_id instead of username
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        currentSession = {
+                            session_id: data.session_id,
+                            adaptive_session_id: data.adaptive_session_id,
+                            exam_name: data.exam_name,
+                            total_questions: data.total_questions
+                        };
+                        
+                        document.getElementById('examTitle').textContent = data.exam_name;
+                        
+                        // Hide exams list and show exam session
+                        document.getElementById('examsList').style.display = 'none';
+                        document.getElementById('examSession').style.display = 'block';
+                        
+                        // Get first question
+                        await getNextQuestion(data.session_id);
+                        
+                        showAlert('✅ Exam Started Successfully!', 'success');
+                    } else {
+                        throw new Error(data.error || 'Failed to join exam');
+                    }
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to join exam');
+                }
+            } catch (error) {
+                showAlert('❌ Error: ' + error.message, 'error');
+                console.error('Start exam error:', error);
+            }
+        }
+
+        // Get next question
+        async function getNextQuestion(sessionId) {
+            try {
+                document.getElementById('loadingText').textContent = 'Adaptive BKT system is selecting your optimal next question...';
+                
+                const response = await fetch(`/enhanced-exam-session/question/${sessionId}/`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.question) {
+                        currentQuestion = data.question;
+                        displayQuestion(data.question);
+                    } else if (data.exam_completed) {
+                        showExamCompleted();
+                    } else {
+                        throw new Error('No more questions available');
+                    }
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to get question');
+                }
+            } catch (error) {
+                showAlert('❌ Error: ' + error.message, 'error');
+                console.error('Get question error:', error);
+            }
+        }
+
+        // Display question
+        function displayQuestion(question) {
+            console.log('📝 Displaying question:', question);
+            
+            const container = document.getElementById('questionContainer');
+            
+            let html = `
+                <div class="question-text">
+                    <strong>Q${question.question_number}:</strong> ${question.question_text || 'Loading question text...'}
+                </div>
+                <div class="options-container">
+            `;
+            
+            if (question.options && question.options.length > 0) {
+                question.options.forEach(option => {
+                    html += `
+                        <div class="option" onclick="selectAnswer('${option.id}')">
+                            <strong>${option.id.toUpperCase()}</strong>) ${option.text || 'Loading option...'}
+                        </div>`;
+                });
+            } else {
+                html += '<div class="alert alert-warning">Options loading...</div>';
+            }
+            
+            html += '</div>';
+            container.innerHTML = html;
+            
+            // Update progress
+            const progress = ((question.question_number || 1) / (currentSession?.total_questions || 20)) * 100;
+            document.getElementById('progressBar').style.width = progress + '%';
+            document.getElementById('progressText').textContent = 
+                `Question ${question.question_number || 1} of ${currentSession?.total_questions || 20}`;
+            
+            // Show mastery info
+            if (question.current_mastery !== undefined) {
+                document.getElementById('masteryLevel').textContent = Math.round(question.current_mastery * 100) + '%';
+                document.getElementById('difficultyLevel').textContent = question.difficulty || 'Unknown';
+                document.getElementById('masteryInfo').style.display = 'block';
+            }
+            
+            // Reset selection
+            selectedAnswer = null;
+            document.getElementById('submitBtn').disabled = true;
+        }
+
+        // Select answer
+        function selectAnswer(answerId) {
+            // Remove previous selection
+            document.querySelectorAll('.option').forEach(opt => opt.classList.remove('selected'));
+            
+            // Add selection to clicked option
+            event.target.classList.add('selected');
+            
+            selectedAnswer = answerId;
+            document.getElementById('submitBtn').disabled = false;
+        }
+
+        // Submit answer
+        async function submitAnswer() {
+            if (!selectedAnswer || !currentSession || !currentQuestion) return;
+
+            try {
+                document.getElementById('submitBtn').disabled = true;
+                document.getElementById('submitBtn').textContent = 'Submitting...';
+                
+                const response = await fetch(`/enhanced-exam-session/submit-answer/${currentSession.session_id}/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question_id: currentQuestion.question_id,
+                        selected_answer: selectedAnswer,
+                        time_taken: 30
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        const isCorrect = data.is_correct;
+                        showAlert(
+                            `${isCorrect ? '✅ Correct!' : '❌ Incorrect'} Answer submitted. Score: ${data.current_score.toFixed(1)}%`,
+                            isCorrect ? 'success' : 'error'
+                        );
+                        
+                        // Wait a moment then get next question
+                        setTimeout(() => {
+                            getNextQuestion(currentSession.session_id);
+                        }, 2000);
+                    } else {
+                        throw new Error(data.error || 'Failed to submit answer');
+                    }
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to submit answer');
+                }
+            } catch (error) {
+                showAlert('❌ Error: ' + error.message, 'error');
+                console.error('Submit answer error:', error);
+                document.getElementById('submitBtn').disabled = false;
+                document.getElementById('submitBtn').textContent = 'Submit Answer';
+            }
+        }
+
+        // Exit exam
+        function exitExam() {
+            if (confirm('Are you sure you want to exit the exam?')) {
+                currentSession = null;
+                currentQuestion = null;
+                selectedAnswer = null;
+                
+                document.getElementById('examSession').style.display = 'none';
+                document.getElementById('examsList').style.display = 'block';
+                
+                showAlert('🚪 Exam exited', 'info');
+            }
+        }
+
+        // Show exam completed
+        function showExamCompleted() {
+            document.getElementById('questionContainer').innerHTML = `
+                <div class="alert alert-success" style="text-align: center;">
+                    <h2>🎉 Exam Completed!</h2>
+                    <p>You have finished all questions in this exam.</p>
+                    <button class="btn btn-success" onclick="exitExam()">Return to Exam List</button>
+                </div>`;
+            document.getElementById('submitBtn').style.display = 'none';
+        }
+
+        // Show alert
+        function showAlert(message, type = 'info') {
+            const alertDiv = document.createElement('div');
+            alertDiv.className = `alert alert-${type}`;
+            alertDiv.innerHTML = message;
+            
+            // Insert after header
+            const header = document.querySelector('.header');
+            header.insertAdjacentElement('afterend', alertDiv);
+            
+            // Remove after 5 seconds
+            setTimeout(() => {
+                if (alertDiv.parentNode) {
+                    alertDiv.parentNode.removeChild(alertDiv);
+                }
+            }, 5000);
+        }
+
+        // Initialize
+        window.addEventListener('load', async () => {
+            console.log('🎯 Enhanced Exam Demo Loading...');
+            
+            const systemWorking = await checkSystemStatus();
+            if (systemWorking) {
+                await loadScheduledExams();
+                console.log('✅ Demo ready! Backend is serving real questions.');
+            } else {
+                console.log('❌ Backend connection failed');
+            }
+        });
+    </script>
+</body>
+</html>

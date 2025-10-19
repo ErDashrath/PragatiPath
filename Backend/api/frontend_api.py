@@ -1574,48 +1574,42 @@ def get_student_scheduled_exams(request, student_id):
     Get list of scheduled/available exams for a specific student
     """
     try:
-        # Validate student exists
-        try:
-            student_profile = StudentProfile.objects.get(id=student_id)
-        except StudentProfile.DoesNotExist:
-            return api_error_response("Student not found", "STUDENT_NOT_FOUND", 404)
-        
+        from assessment.models import EnhancedExam
         from django.utils import timezone
+        
         now = timezone.now()
         
-        # Mock student exams based on their subjects
-        mock_student_exams = [
-            {
-                'id': 1001,
-                'title': 'Mathematics Midterm',
-                'status': 'scheduled',
-                'start_time': (now + timedelta(days=1)).isoformat(),
-                'duration_minutes': 120,
-                'subjects': ['Mathematics'],
-                'question_count': 50,
-                'countdown_minutes': int((now + timedelta(days=1) - now).total_seconds() / 60),
-                'can_start': False,
-                'instructions': 'This is a comprehensive mathematics test covering algebra and calculus.'
-            },
-            {
-                'id': 1002,
-                'title': 'Physics Quiz',
-                'status': 'active',
-                'start_time': (now - timedelta(minutes=30)).isoformat(),
-                'duration_minutes': 60,
-                'subjects': ['Physics'],
-                'question_count': 30,
-                'countdown_minutes': 30,  # 30 minutes remaining
-                'can_start': True,
-                'instructions': 'Quick physics quiz on mechanics and thermodynamics.'
-            }
-        ]
+        # Get real enhanced exams that are ACTIVE
+        enhanced_exams = EnhancedExam.objects.filter(
+            status__in=['ACTIVE', 'SCHEDULED']
+        )
         
-        return api_success_response(mock_student_exams, "Student exams retrieved successfully")
+        result = []
+        for exam in enhanced_exams:
+            try:
+                # Convert to frontend-expected format
+                exam_data = {
+                    "id": str(exam.id),
+                    "exam_name": exam.exam_name or "Untitled Exam",
+                    "subject": exam.subject.code if exam.subject else "general",
+                    "total_questions": exam.total_questions or 10,
+                    "duration_minutes": exam.duration_minutes or 60,
+                    "scheduled_start_time": exam.scheduled_start_time.isoformat() if exam.scheduled_start_time else None,
+                    "scheduled_end_time": exam.scheduled_end_time.isoformat() if exam.scheduled_end_time else None,
+                    "status": exam.status or "ACTIVE",
+                    "passing_score_percentage": 60.0,
+                    "description": exam.description or ""
+                }
+                result.append(exam_data)
+            except Exception as e:
+                # Skip problematic exams but log the error
+                print(f"Error processing exam {exam.id}: {e}")
+                continue
+        
+        return api_success_response(result, f"Found {len(result)} scheduled exams")
         
     except Exception as e:
-        logger.error(f"Error fetching student exams: {e}")
-        return api_error_response("Failed to fetch student exams", "FETCH_ERROR", 500)
+        return api_error_response(f"Failed to fetch student exams: {str(e)}", "FETCH_ERROR")
 
 
 @api_view(['POST'])

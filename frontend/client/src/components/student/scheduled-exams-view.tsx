@@ -21,6 +21,7 @@ import {
 import { format, formatDistanceToNow, isAfter, isBefore } from "date-fns";
 import { useAuth } from "@/hooks/use-auth";
 import { apiRequest } from "@/lib/queryClient";
+import EnhancedExamInterface from "./EnhancedExamInterface";
 
 // Enhanced types for student exam view with new schema
 interface EnhancedStudentExam {
@@ -78,6 +79,7 @@ export default function ScheduledExamsView({ onStartExam }: ScheduledExamsViewPr
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const [currentTime, setCurrentTime] = useState(new Date());
+  const [showExamInterface, setShowExamInterface] = useState(false);
 
   console.log("🎯 ScheduledExamsView component mounted! User:", user?.username);
 
@@ -87,7 +89,7 @@ export default function ScheduledExamsView({ onStartExam }: ScheduledExamsViewPr
     queryFn: async (): Promise<EnhancedStudentExam[]> => {
       try {
         console.log("🔄 Starting exam fetch...");
-        const response = await apiRequest("GET", "http://localhost:8000/api/enhanced-exam/student/exams/available");
+        const response = await apiRequest("GET", "http://localhost:8000/api/v1/enhanced-exam/student/1/exams/scheduled/");
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -296,6 +298,31 @@ export default function ScheduledExamsView({ onStartExam }: ScheduledExamsViewPr
 
   console.log("🎯 Rendering main content - Available:", availableExams.length, "Upcoming:", upcomingExams.length);
 
+  // If there are available exams and user hasn't explicitly chosen to see the list, show exam interface
+  if (availableExams.length > 0 && !showExamInterface) {
+    setShowExamInterface(true);
+  }
+
+  // Show exam interface if there are available exams
+  if (showExamInterface && availableExams.length > 0) {
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-2xl font-bold text-foreground">Taking Exam: {availableExams[0].exam_name}</h2>
+          <Button 
+            variant="outline" 
+            onClick={() => setShowExamInterface(false)}
+            className="flex items-center gap-2"
+          >
+            <Eye className="h-4 w-4" />
+            View All Exams
+          </Button>
+        </div>
+        <EnhancedExamInterface />
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -350,7 +377,7 @@ export default function ScheduledExamsView({ onStartExam }: ScheduledExamsViewPr
                         <FileText className="h-3 w-3" />
                         {exam.question_count} questions
                       </span>
-                      {exam.chapters.length > 0 && (
+                      {exam.chapters && exam.chapters.length > 0 && (
                         <span className="flex items-center gap-1">
                           <Target className="h-3 w-3" />
                           {exam.chapters.length} chapters
@@ -364,13 +391,13 @@ export default function ScheduledExamsView({ onStartExam }: ScheduledExamsViewPr
                       </div>
                     )}
 
-                    {exam.chapters.length > 0 && (
+                    {exam.chapters && exam.chapters.length > 0 && (
                       <div className="text-sm">
                         <strong>Chapters:</strong> {exam.chapters.join(", ")}
                       </div>
                     )}
 
-                    {exam.content_selection.difficulty_levels && (
+                    {exam.content_selection && exam.content_selection.difficulty_levels && (
                       <div className="text-sm">
                         <strong>Difficulty:</strong> {exam.content_selection.difficulty_levels.join(", ")}
                       </div>
@@ -378,12 +405,11 @@ export default function ScheduledExamsView({ onStartExam }: ScheduledExamsViewPr
                   </div>
 
                   <Button
-                    onClick={() => handleStartExam(exam)}
-                    disabled={startExamMutation.isPending}
+                    onClick={() => setShowExamInterface(true)}
                     className="bg-green-600 hover:bg-green-700"
                   >
                     <Play className="h-4 w-4 mr-2" />
-                    {startExamMutation.isPending ? "Starting..." : "Start Exam"}
+                    Start Exam
                   </Button>
                 </div>
               </CardContent>
@@ -416,7 +442,7 @@ export default function ScheduledExamsView({ onStartExam }: ScheduledExamsViewPr
                       <span>{exam.subject_name}</span>
                       <span>{exam.duration_minutes} minutes</span>
                       <span>{exam.question_count} questions</span>
-                      {exam.chapters.length > 0 && (
+                      {exam.chapters && exam.chapters.length > 0 && (
                         <span>{exam.chapters.length} chapters</span>
                       )}
                     </div>
@@ -427,7 +453,7 @@ export default function ScheduledExamsView({ onStartExam }: ScheduledExamsViewPr
                       </div>
                     )}
 
-                    {exam.chapters.length > 0 && (
+                    {exam.chapters && exam.chapters.length > 0 && (
                       <div className="text-sm text-muted-foreground">
                         Chapters: {exam.chapters.join(", ")}
                       </div>

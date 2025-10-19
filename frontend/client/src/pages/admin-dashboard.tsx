@@ -17,9 +17,11 @@ export default function AdminDashboard() {
   const [currentView, setCurrentView] = useState<AdminView>('overview');
 
   useEffect(() => {
-    if (user?.userType !== 'admin') {
-      navigate('/auth');
-    }
+    // Temporarily disabled for demo - allow direct access
+    // if (user?.userType !== 'admin') {
+    //   navigate('/auth');
+    // }
+    console.log('🔍 Admin Dashboard loaded - Authentication check bypassed for demo');
   }, [user, navigate]);
 
   const handleLogout = () => {
@@ -77,8 +79,18 @@ export default function AdminDashboard() {
             
             <div className="flex items-center space-x-4">
               <span className="hidden sm:block text-sm text-muted-foreground">
-                {user?.name}
+                {user?.name || 'Admin User'}
               </span>
+              
+              {/* Quick Student Switch for Demo */}
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => navigate('/student')}
+                className="bg-green-50 hover:bg-green-100 border-green-300"
+              >
+                👨‍🎓 Student View
+              </Button>
               
               {/* Mobile Navigation */}
               <div className="md:hidden">

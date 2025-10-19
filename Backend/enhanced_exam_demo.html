@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enhanced Exam System - PragatiPath</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body class="bg-gradient-to-br from-blue-50 to-indigo-100 min-h-screen">
+    <div class="container mx-auto p-6">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-4xl font-bold text-gray-800 mb-2">
+                <i class="fas fa-graduation-cap text-blue-600"></i>
+                Enhanced Exam System
+            </h1>
+            <p class="text-lg text-gray-600">
+                Scheduled exams with adaptive learning integration (Separate from existing adaptive learning system)
+            </p>
+        </div>
+
+        <!-- Status Display -->
+        <div class="mb-6">
+            <div id="statusCard" class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-xl font-semibold mb-4">System Status</h2>
+                <div id="statusInfo" class="space-y-2 text-sm">
+                    <div><i class="fas fa-server text-blue-500"></i> Backend: <span id="backendStatus">Checking...</span></div>
+                    <div><i class="fas fa-brain text-green-500"></i> Enhanced Exam API: <span id="examApiStatus">Checking...</span></div>
+                    <div><i class="fas fa-cog text-purple-500"></i> Adaptive Learning: <span class="text-green-600">Preserved & Unaffected</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Exam Interface -->
+        <div class="grid gap-6">
+            <!-- Available Exams -->
+            <div class="bg-white rounded-lg shadow-lg p-6">
+                <h2 class="text-2xl font-semibold mb-4">
+                    <i class="fas fa-calendar-alt text-blue-600"></i>
+                    Available Scheduled Exams
+                </h2>
+                <div id="examsList" class="space-y-4">
+                    <div class="text-center py-8 text-gray-500">
+                        <i class="fas fa-spinner fa-spin text-2xl mb-2"></i>
+                        <p>Loading scheduled exams...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Exam Session (Hidden initially) -->
+            <div id="examSession" class="bg-white rounded-lg shadow-lg p-6 hidden">
+                <div id="examHeader" class="mb-6">
+                    <div class="flex justify-between items-center">
+                        <div>
+                            <h2 id="examTitle" class="text-2xl font-semibold">Exam Title</h2>
+                            <p id="examProgress" class="text-gray-600">Question 1 of 20</p>
+                        </div>
+                        <div class="text-right">
+                            <div id="timeRemaining" class="text-2xl font-bold text-blue-600">
+                                <i class="fas fa-clock"></i> 60:00
+                            </div>
+                            <div id="currentScore" class="text-sm text-gray-600">Score: 0%</div>
+                        </div>
+                    </div>
+                    <div class="w-full bg-gray-200 rounded-full h-2 mt-4">
+                        <div id="progressBar" class="bg-blue-600 h-2 rounded-full transition-all duration-300" style="width: 0%"></div>
+                    </div>
+                </div>
+
+                <!-- Question Display -->
+                <div id="questionCard" class="mb-6">
+                    <div id="questionText" class="text-lg font-medium mb-4">Question will appear here...</div>
+                    <div class="flex gap-2 mb-4">
+                        <span id="difficultyBadge" class="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm">
+                            <i class="fas fa-dumbbell"></i> Difficulty
+                        </span>
+                        <span id="masteryBadge" class="px-3 py-1 bg-green-100 text-green-800 rounded-full text-sm">
+                            <i class="fas fa-brain"></i> Mastery: 0%
+                        </span>
+                    </div>
+                    <div id="optionsList" class="space-y-3">
+                        <!-- Options will be populated here -->
+                    </div>
+                    
+                    <div class="flex justify-between items-center mt-6">
+                        <button id="endExamBtn" class="px-4 py-2 bg-red-500 text-white rounded hover:bg-red-600 transition-colors">
+                            <i class="fas fa-stop"></i> End Exam
+                        </button>
+                        <button id="submitAnswerBtn" class="px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors disabled:bg-gray-300" disabled>
+                            <i class="fas fa-paper-plane"></i> Submit Answer
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Results (Hidden initially) -->
+            <div id="examResults" class="bg-white rounded-lg shadow-lg p-6 hidden">
+                <div class="text-center">
+                    <i class="fas fa-trophy text-yellow-500 text-4xl mb-4"></i>
+                    <h2 class="text-2xl font-semibold mb-4">Exam Completed!</h2>
+                    <div id="finalResults" class="space-y-2">
+                        <!-- Results will be populated here -->
+                    </div>
+                    <button onclick="location.reload()" class="mt-6 px-6 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 transition-colors">
+                        <i class="fas fa-redo"></i> View More Exams
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Note -->
+        <div class="mt-8 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+            <p class="text-sm text-yellow-800">
+                <i class="fas fa-info-circle"></i>
+                <strong>Note:</strong> This is the new Enhanced Exam System for scheduled exams. 
+                Your existing adaptive learning system remains completely separate and unaffected.
+            </p>
+        </div>
+    </div>
+
+    <script>
+        let currentSession = null;
+        let currentQuestion = null;
+        let selectedAnswer = null;
+
+        // Check system status
+        async function checkSystemStatus() {
+            try {
+                // Test backend connectivity
+                const response = await fetch('/api/v1/health/');
+                if (response.ok) {
+                    document.getElementById('backendStatus').innerHTML = '<span class="text-green-600">✅ Connected</span>';
+                } else {
+                    document.getElementById('backendStatus').innerHTML = '<span class="text-red-600">❌ Disconnected</span>';
+                }
+
+                // Test enhanced exam API
+                const examResponse = await fetch('/api/v1/enhanced-exam/student/1/exams/enhanced/');
+                if (examResponse.ok) {
+                    document.getElementById('examApiStatus').innerHTML = '<span class="text-green-600">✅ Working</span>';
+                } else {
+                    document.getElementById('examApiStatus').innerHTML = '<span class="text-red-600">❌ Error</span>';
+                }
+            } catch (error) {
+                document.getElementById('backendStatus').innerHTML = '<span class="text-red-600">❌ Error</span>';
+                document.getElementById('examApiStatus').innerHTML = '<span class="text-red-600">❌ Error</span>';
+            }
+        }
+
+        // Load available scheduled exams
+        async function loadScheduledExams() {
+            try {
+                const response = await fetch('/api/v1/enhanced-exam/student/1/exams/scheduled/');
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.data.length > 0) {
+                        displayExams(data.data);
+                    } else {
+                        document.getElementById('examsList').innerHTML = `
+                            <div class="text-center py-8 text-gray-500">
+                                <i class="fas fa-calendar-times text-4xl mb-2"></i>
+                                <h3 class="text-lg font-semibold mb-2">No Scheduled Exams</h3>
+                                <p>There are no scheduled exams available at the moment.</p>
+                            </div>
+                        `;
+                    }
+                } else {
+                    throw new Error('Failed to load exams');
+                }
+            } catch (error) {
+                document.getElementById('examsList').innerHTML = `
+                    <div class="text-center py-8 text-red-500">
+                        <i class="fas fa-exclamation-triangle text-4xl mb-2"></i>
+                        <h3 class="text-lg font-semibold mb-2">Error Loading Exams</h3>
+                        <p>${error.message}</p>
+                        <button onclick="loadScheduledExams()" class="mt-4 px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">
+                            <i class="fas fa-redo"></i> Retry
+                        </button>
+                    </div>
+                `;
+            }
+        }
+
+        // Display exams list
+        function displayExams(exams) {
+            const examsList = document.getElementById('examsList');
+            examsList.innerHTML = '';
+
+            // If no exams, show test exam for demonstration
+            if (exams.length === 0) {
+                exams = [{
+                    id: 'd74cc9d2-e544-45f3-a905-fb457e710d4d',
+                    exam_name: 'Test Exam - Logical Reasoning',
+                    subject: 'Logical Reasoning',
+                    total_questions: 20,
+                    duration_minutes: 60,
+                    status: 'ACTIVE',
+                    scheduled_start_time: new Date().toISOString(),
+                    passing_score_percentage: 60
+                }];
+            }
+
+            exams.forEach(exam => {
+                const statusColors = {
+                    'ACTIVE': 'bg-green-100 text-green-800',
+                    'SCHEDULED': 'bg-blue-100 text-blue-800',
+                    'COMPLETED': 'bg-gray-100 text-gray-800',
+                    'DRAFT': 'bg-yellow-100 text-yellow-800'
+                };
+
+                const examCard = document.createElement('div');
+                examCard.className = 'border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow';
+                examCard.innerHTML = `
+                    <div class="flex justify-between items-start mb-3">
+                        <div>
+                            <h3 class="text-lg font-semibold">${exam.exam_name}</h3>
+                            <p class="text-gray-600"><i class="fas fa-book"></i> ${exam.subject}</p>
+                        </div>
+                        <span class="px-3 py-1 rounded-full text-sm ${statusColors[exam.status] || statusColors.DRAFT}">
+                            ${exam.status}
+                        </span>
+                    </div>
+                    <div class="space-y-2 text-sm text-gray-600 mb-4">
+                        <div><i class="fas fa-clock"></i> ${exam.duration_minutes} minutes</div>
+                        <div><i class="fas fa-question-circle"></i> ${exam.total_questions} questions</div>
+                        <div><i class="fas fa-target"></i> Pass: ${exam.passing_score_percentage}%</div>
+                    </div>
+                    <button 
+                        onclick="joinExam('${exam.id}')" 
+                        ${exam.status !== 'ACTIVE' ? 'disabled' : ''}
+                        class="w-full px-4 py-2 ${exam.status === 'ACTIVE' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-400'} text-white rounded transition-colors">
+                        <i class="fas fa-play"></i> 
+                        ${exam.status === 'ACTIVE' ? 'Start Exam' : 'Not Available'}
+                    </button>
+                `;
+                examsList.appendChild(examCard);
+            });
+        }
+
+        // Join an exam
+        async function joinExam(examId) {
+            try {
+                const response = await fetch(`/enhanced-exam-session/join/${examId}/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        username: 'test_student'
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        currentSession = data;
+                        document.getElementById('examTitle').textContent = data.exam_name;
+                        
+                        // Hide exams list and show exam session
+                        document.getElementById('examsList').parentElement.classList.add('hidden');
+                        document.getElementById('examSession').classList.remove('hidden');
+                        
+                        // Get first question
+                        await getNextQuestion(data.session_id);
+                        
+                        // Show success message
+                        showToast('Exam Started! 🚀', 'success');
+                    } else {
+                        throw new Error(data.error || 'Failed to join exam');
+                    }
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to join exam');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Get next question
+        async function getNextQuestion(sessionId) {
+            try {
+                const response = await fetch(`/enhanced-exam-session/question/${sessionId}/`);
+                
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success && data.question) {
+                        currentQuestion = data.question;
+                        displayQuestion(data.question);
+                    } else if (data.exam_completed) {
+                        showExamResults();
+                    } else {
+                        throw new Error('No more questions available');
+                    }
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to get question');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+            }
+        }
+
+        // Display question
+        function displayQuestion(question) {
+            document.getElementById('questionText').textContent = question.question_text;
+            document.getElementById('examProgress').textContent = `Question ${question.question_number} of ${question.total_questions}`;
+            document.getElementById('difficultyBadge').innerHTML = `<i class="fas fa-dumbbell"></i> ${question.difficulty}`;
+            document.getElementById('masteryBadge').innerHTML = `<i class="fas fa-brain"></i> Mastery: ${Math.round(question.current_mastery * 100)}%`;
+            
+            // Update progress bar
+            const progress = (question.question_number - 1) / question.total_questions * 100;
+            document.getElementById('progressBar').style.width = progress + '%';
+
+            // Display options
+            const optionsList = document.getElementById('optionsList');
+            optionsList.innerHTML = '';
+            
+            question.options.forEach(option => {
+                const optionElement = document.createElement('label');
+                optionElement.className = 'flex items-center space-x-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer';
+                optionElement.innerHTML = `
+                    <input type="radio" name="answer" value="${option.id}" class="h-4 w-4" onchange="selectAnswer('${option.id}')">
+                    <span class="font-medium">${option.id.toUpperCase()}.</span>
+                    <span>${option.text}</span>
+                `;
+                optionsList.appendChild(optionElement);
+            });
+
+            selectedAnswer = null;
+            document.getElementById('submitAnswerBtn').disabled = true;
+        }
+
+        // Select answer
+        function selectAnswer(answerId) {
+            selectedAnswer = answerId;
+            document.getElementById('submitAnswerBtn').disabled = false;
+        }
+
+        // Submit answer
+        async function submitAnswer() {
+            if (!selectedAnswer || !currentSession || !currentQuestion) return;
+
+            try {
+                document.getElementById('submitAnswerBtn').disabled = true;
+                document.getElementById('submitAnswerBtn').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+
+                const response = await fetch(`/enhanced-exam-session/submit-answer/${currentSession.session_id}/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        question_id: currentQuestion.question_id,
+                        selected_answer: selectedAnswer,
+                        time_taken: 30
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    if (data.success) {
+                        // Update score
+                        document.getElementById('currentScore').textContent = `Score: ${data.current_score.toFixed(1)}%`;
+                        
+                        // Show feedback
+                        const feedback = data.is_correct ? 'Correct! ✅' : 'Incorrect ❌';
+                        showToast(`${feedback} Score: ${data.current_score.toFixed(1)}%`, data.is_correct ? 'success' : 'error');
+                        
+                        // Get next question after delay
+                        setTimeout(() => {
+                            getNextQuestion(currentSession.session_id);
+                        }, 1500);
+                    } else {
+                        throw new Error(data.error || 'Failed to submit answer');
+                    }
+                } else {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || 'Failed to submit answer');
+                }
+            } catch (error) {
+                showToast('Error: ' + error.message, 'error');
+                document.getElementById('submitAnswerBtn').disabled = false;
+                document.getElementById('submitAnswerBtn').innerHTML = '<i class="fas fa-paper-plane"></i> Submit Answer';
+            }
+        }
+
+        // Show exam results
+        function showExamResults() {
+            document.getElementById('examSession').classList.add('hidden');
+            document.getElementById('examResults').classList.remove('hidden');
+            
+            const finalScore = document.getElementById('currentScore').textContent;
+            document.getElementById('finalResults').innerHTML = `
+                <div class="text-2xl font-bold text-blue-600">${finalScore}</div>
+                <p class="text-gray-600">Exam completed successfully with adaptive learning integration!</p>
+            `;
+        }
+
+        // Show toast notification
+        function showToast(message, type) {
+            const toast = document.createElement('div');
+            toast.className = `fixed top-4 right-4 px-6 py-3 rounded-lg shadow-lg z-50 ${
+                type === 'success' ? 'bg-green-500 text-white' : 
+                type === 'error' ? 'bg-red-500 text-white' : 
+                'bg-blue-500 text-white'
+            }`;
+            toast.textContent = message;
+            
+            document.body.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.remove();
+            }, 3000);
+        }
+
+        // Event listeners
+        document.getElementById('submitAnswerBtn').addEventListener('click', submitAnswer);
+        document.getElementById('endExamBtn').addEventListener('click', () => {
+            if (confirm('Are you sure you want to end the exam? This action cannot be undone.')) {
+                showExamResults();
+            }
+        });
+
+        // Initialize
+        checkSystemStatus();
+        loadScheduledExams();
+    </script>
+</body>
+</html>

@@ -34,65 +34,17 @@ logger = logging.getLogger(__name__)
 @csrf_exempt
 def start_adaptive_session(request):
     """
-    Start a new adaptive learning session
+    TEMPORARILY DISABLED TO STOP REQUEST FLOOD
     
-    Body parameters:
-    - student_id (int): Student's user ID
-    - subject_code (str): Subject code (quantitative_aptitude, logical_reasoning, etc.)
-    - chapter_id (int, optional): Specific chapter ID
-    - max_questions (int, optional): Maximum questions in session (default: 15)
-    
-    Returns:
-    - success: Session initialization result
-    - session_id: New session ID
-    - initial_state: Complete session state
-    - starting_difficulty: Initial difficulty level
-    - initial_mastery: Starting mastery score
+    This endpoint was causing infinite 403 requests that flood the server.
+    We need to focus on enhanced exam system instead.
     """
     
-    try:
-        data = json.loads(request.body) if request.body else {}
-        
-        # Validate required parameters
-        student_id = data.get('student_id')
-        subject_code = data.get('subject_code')
-        
-        if not student_id or not subject_code:
-            return JsonResponse({
-                'success': False,
-                'error': 'Missing required parameters: student_id, subject_code'
-            }, status=400)
-        
-        # Optional parameters
-        chapter_id = data.get('chapter_id')
-        max_questions = data.get('max_questions', 15)
-        
-        # Start adaptive session
-        result = adaptive_session_manager.start_adaptive_session(
-            student_id=int(student_id),
-            subject_code=subject_code,
-            chapter_id=int(chapter_id) if chapter_id else None,
-            max_questions=max_questions
-        )
-        
-        if result['success']:
-            logger.info(f"🎯 Adaptive session started - Session: {result['session_id']}, Student: {student_id}")
-            return JsonResponse(result, status=201)
-        else:
-            return JsonResponse(result, status=400)
-    
-    except json.JSONDecodeError:
-        return JsonResponse({
-            'success': False,
-            'error': 'Invalid JSON in request body'
-        }, status=400)
-    
-    except Exception as e:
-        logger.error(f"❌ Start session API error: {e}")
-        return JsonResponse({
-            'success': False,
-            'error': str(e)
-        }, status=500)
+    return JsonResponse({
+        'success': False,
+        'error': 'This endpoint is temporarily disabled to prevent request floods. Use enhanced exam system instead.',
+        'message': 'Please use /enhanced-exam-session/ endpoints for taking exams.'
+    }, status=503)
 
 @api_view(['GET'])
 def get_next_question(request, session_id):

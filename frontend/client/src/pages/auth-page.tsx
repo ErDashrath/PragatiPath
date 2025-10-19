@@ -214,7 +214,35 @@ export default function AuthPage() {
                   <div className="text-center text-sm text-muted-foreground space-y-2">
                     <p>Demo Credentials:</p>
                     <p>Student: student / password</p>
-                    <p>Admin: admin / admin123</p>
+                    <p>Admin: admin123 / admin123</p>
+                  </div>
+                  
+                  {/* Quick Admin Login */}
+                  <div className="space-y-2 pt-4 border-t">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full bg-blue-50 hover:bg-blue-100 border-blue-300"
+                      onClick={() => {
+                        // Direct redirect to admin dashboard for demo
+                        console.log('🔐 Quick Admin Login - Redirecting to admin dashboard');
+                        navigate('/admin');
+                      }}
+                    >
+                      🔐 Quick Admin Login
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="w-full bg-green-50 hover:bg-green-100 border-green-300"
+                      onClick={() => {
+                        // Direct redirect to student dashboard for demo
+                        console.log('👨‍🎓 Quick Student Login - Redirecting to student dashboard');
+                        navigate('/student');
+                      }}
+                    >
+                      👨‍🎓 Quick Student Login
+                    </Button>
                   </div>
                 </>
               )}
