@@ -42,6 +42,24 @@ student_patterns = [
     path('<int:student_id>/dashboard/', frontend_api.get_student_dashboard, name='get_student_dashboard'),
 ]
 
+# Enhanced Exam Management URLs
+enhanced_exam_patterns = [
+    path('admin/subjects/details/', frontend_api.enhanced_subjects_details, name='enhanced_subjects_details'),
+    path('admin/subjects/<int:subject_id>/chapters/', frontend_api.enhanced_subject_chapters, name='enhanced_subject_chapters'),
+    path('admin/exams/validate-question-pool/', frontend_api.validate_question_pool, name='validate_question_pool'),
+    path('admin/exams/create-enhanced/', frontend_api.create_enhanced_exam, name='create_enhanced_exam'),
+    path('admin/exams/enhanced/list/', frontend_api.list_enhanced_exams, name='list_enhanced_exams'),
+    path('student/<str:student_id>/exams/enhanced/', frontend_api.get_student_enhanced_exams, name='get_student_enhanced_exams'),
+    
+    # NEW: Exam Broadcasting & Management Endpoints
+    path('admin/exams/schedule/', frontend_api.schedule_enhanced_exam, name='schedule_enhanced_exam'),
+    path('admin/exams/scheduled/', frontend_api.get_scheduled_exams, name='get_scheduled_exams'),
+    path('admin/exams/<str:exam_id>/activate/', frontend_api.activate_exam_manual, name='activate_exam_manual'),
+    path('admin/exams/<str:exam_id>/end/', frontend_api.end_exam_manual, name='end_exam_manual'),
+    path('admin/subjects/with-ids/', frontend_api.get_subjects_with_ids, name='get_subjects_with_ids'),
+    path('student/<str:student_id>/exams/scheduled/', frontend_api.get_student_scheduled_exams, name='get_student_scheduled_exams'),
+]
+
 # Main API v1 URL patterns
 urlpatterns = [
     # CORS preflight handler
@@ -58,6 +76,9 @@ urlpatterns = [
     
     # Student dashboard endpoints
     path('v1/students/', include(student_patterns)),
+    
+    # Enhanced exam management endpoints
+    path('v1/enhanced-exam/', include(enhanced_exam_patterns)),
     
     # Health check endpoint
     path('v1/health/', frontend_api.api_health_check, name='api_health_check'),

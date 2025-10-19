@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Frontend Debug - Student Exams</title>
+</head>
+<body>
+    <h1>🧪 Frontend Student Exams Debug</h1>
+    <div id="results"></div>
+    
+    <script>
+        const log = (message) => {
+            const results = document.getElementById('results');
+            results.innerHTML += '<p>' + message + '</p>';
+            console.log(message);
+        };
+
+        async function testStudentExams() {
+            try {
+                log('🔐 Step 1: Testing login...');
+                
+                // Login first
+                const loginResponse = await fetch('http://localhost:8000/api/core/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        username: 'dash',
+                        password: '12345678'
+                    }),
+                    credentials: 'include'  // Important for cookies
+                });
+
+                if (loginResponse.ok) {
+                    const userData = await loginResponse.json();
+                    log(`✅ Login successful! User: ${userData.username} (ID: ${userData.id})`);
+                } else {
+                    log(`❌ Login failed: ${loginResponse.status}`);
+                    return;
+                }
+
+                log('📚 Step 2: Fetching available exams...');
+                
+                // Fetch exams with credentials
+                const examsResponse = await fetch('http://localhost:8000/api/enhanced-exam/student/exams/available', {
+                    credentials: 'include'
+                });
+
+                if (examsResponse.ok) {
+                    const examsData = await examsResponse.json();
+                    log(`✅ Exams fetched! Found ${examsData.length} exams`);
+                    
+                    examsData.slice(0, 3).forEach((exam, i) => {
+                        log(`   ${i+1}. ${exam.exam_name || 'Unnamed'} (${exam.subject || 'No subject'})`);
+                        log(`      Status: ${exam.status} | Duration: ${exam.duration_minutes} min`);
+                    });
+                } else {
+                    log(`❌ Exams fetch failed: ${examsResponse.status}`);
+                    const errorText = await examsResponse.text();
+                    log(`   Error: ${errorText}`);
+                }
+
+                log('👤 Step 3: Testing user auth check...');
+                
+                // Check user auth
+                const userResponse = await fetch('http://localhost:8000/api/core/user', {
+                    credentials: 'include'
+                });
+
+                if (userResponse.ok) {
+                    const userInfo = await userResponse.json();
+                    log(`✅ User auth valid! User: ${userInfo.username} (Type: ${userInfo.user_type || 'Unknown'})`);
+                } else {
+                    log(`❌ User auth failed: ${userResponse.status}`);
+                }
+
+            } catch (error) {
+                log(`❌ JavaScript Error: ${error.message}`);
+            }
+        }
+
+        // Run the test when page loads
+        window.onload = () => {
+            log('🧪 Starting Frontend Student Exams Test...');
+            testStudentExams();
+        };
+    </script>
+</body>
+</html>

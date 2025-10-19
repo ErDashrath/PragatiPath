@@ -1,304 +1,34 @@
+"""
+Enhanced Exam Models - Production Ready Django Models
+====================================================
+
+This file contains production-ready Django models for the enhanced exam system
+that integrates seamlessly with your existing PragatiPath database structure.
+
+Integration Points:
+- StudentProfile.id (UUID) - Primary student identifier  
+- User model - Django authentication
+- Subject/Chapter - Existing content structure
+- AdaptiveQuestion - Question management
+
+Usage:
+1. Add this to your Django app's models.py
+2. Run: python manage.py makemigrations
+3. Run: python manage.py migrate
+4. Start using the enhanced exam system!
+"""
+
 import uuid
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
-
-# Import user session models (legacy)
-from .user_session_models import UserSession, UserQuestionHistory, UserSubjectProgress, UserDailyStats
-
-# Import improved multi-student models with enhanced mastery tracking
-from .improved_models import (
-    Subject, Chapter, StudentSession, QuestionAttempt, 
-    StudentProgress, DailyStudyStats, StudentMastery
-)
-
-class AdaptiveQuestion(models.Model):
-    QUESTION_TYPES = [
-        ('multiple_choice', 'Multiple Choice'),
-        ('true_false', 'True/False'),
-        ('short_answer', 'Short Answer'),
-        ('numerical', 'Numerical'),
-        ('matching', 'Matching'),
-    ]
-    
-    FUNDAMENTAL_TYPES = [
-        ('listening', 'Listening'),
-        ('grasping', 'Grasping'), 
-        ('retention', 'Retention'),
-        ('application', 'Application'),
-    ]
-    
-    DIFFICULTY_CHOICES = [
-        ('very_easy', 'Very Easy'),
-        ('easy', 'Easy'),
-        ('moderate', 'Moderate'),
-        ('difficult', 'Difficult'),
-    ]
-    
-    SUBJECT_CHOICES = [
-        ('quantitative_aptitude', 'Quantitative Aptitude'),
-        ('logical_reasoning', 'Logical Reasoning'),
-        ('data_interpretation', 'Data Interpretation'),
-        ('verbal_ability', 'Verbal Ability'),
-    ]
-    
-    ANSWER_CHOICES = [
-        ('a', 'Option A'),
-        ('b', 'Option B'),
-        ('c', 'Option C'),
-        ('d', 'Option D'),
-    ]
-    
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
-    # PROPER FOREIGN KEY RELATIONSHIPS - SQL STANDARD DESIGN
-    subject_fk = models.ForeignKey(Subject, on_delete=models.CASCADE, related_name='questions', 
-                                   null=True, blank=True, help_text="Proper FK to Subject table")
-    chapter = models.ForeignKey(Chapter, on_delete=models.CASCADE, related_name='questions',
-                               null=True, blank=True, help_text="Proper FK to Chapter table")
-    
-    # Question Content
-    question_text = models.TextField()
-    question_type = models.CharField(max_length=20, choices=QUESTION_TYPES, default='multiple_choice')
-    
-    # Multiple Choice Options
-    option_a = models.TextField(blank=True)
-    option_b = models.TextField(blank=True)
-    option_c = models.TextField(blank=True)
-    option_d = models.TextField(blank=True)
-    
-    # Answer and Difficulty (CSV format)
-    answer = models.CharField(max_length=1, choices=ANSWER_CHOICES, default='a', help_text="Correct option (a/b/c/d)")
-    difficulty_level = models.CharField(max_length=15, choices=DIFFICULTY_CHOICES, default='moderate', help_text="Difficulty from CSV")
-    tags = models.TextField(blank=True, help_text="Comma-separated tags from CSV")
-    
-    # Legacy subject field for backward compatibility during migration
-    subject = models.CharField(max_length=25, choices=SUBJECT_CHOICES, default='quantitative_aptitude', help_text="Legacy subject field - use subject_fk instead")
-    
-    # Legacy fields for backward compatibility
-    correct_answer = models.TextField(blank=True, help_text="Legacy correct answer field")
-    options = models.JSONField(default=list, blank=True)  # For multiple choice options
-    
-    # IRT (Item Response Theory) Parameters
-    difficulty = models.FloatField(default=0.0, help_text="IRT difficulty parameter (-3 to 3)")
-    discrimination = models.FloatField(default=1.0, help_text="IRT discrimination parameter (>0)")
-    guessing = models.FloatField(default=0.0, help_text="IRT guessing parameter (0-1)")
-    
-    # Learning Classification (legacy)
-    skill_id = models.CharField(max_length=100, help_text="Knowledge component/skill identifier", blank=True)
-    fundamental_type = models.CharField(max_length=20, choices=FUNDAMENTAL_TYPES, blank=True)
-    
-    # Mastery-Based Progression (updated for competitive exams)
-    level = models.IntegerField(default=1, help_text="Difficulty level (1=very_easy, 2=easy, 3=moderate, 4=difficult)")
-    
-    # Metadata
-    topic = models.CharField(max_length=200, blank=True)
-    subtopic = models.CharField(max_length=200, blank=True)
-    bloom_taxonomy_level = models.CharField(max_length=50, blank=True)
-    estimated_time_seconds = models.IntegerField(default=60)
-    
-    # Statistics (updated from interactions)
-    times_attempted = models.IntegerField(default=0)
-    times_correct = models.IntegerField(default=0)
-    average_response_time = models.FloatField(default=0.0)
-    
-    # Timestamps
-    created_at = models.DateTimeField(auto_now_add=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    is_active = models.BooleanField(default=True)
-    
-    def __str__(self):
-        return f"Question: {self.question_text[:50]}... ({self.subject} - {self.difficulty_level})"
-    
-    @property
-    def success_rate(self):
-        return self.times_correct / self.times_attempted if self.times_attempted > 0 else 0
-    
-    @property
-    def formatted_options(self):
-        """Return formatted options for display"""
-        return {
-            'a': self.option_a,
-            'b': self.option_b,
-            'c': self.option_c,
-            'd': self.option_d
-        }
-    
-    @property
-    def correct_option_text(self):
-        """Get the text of the correct option"""
-        options = self.formatted_options
-        return options.get(self.answer, '')
-    
-    def get_difficulty_threshold(self):
-        """Get BKT mastery threshold based on difficulty level"""
-        thresholds = {
-            'very_easy': 0.6,
-            'easy': 0.7,
-            'moderate': 0.8,
-            'difficult': 0.9
-        }
-        return thresholds.get(self.difficulty_level, 0.8)
-    
-    class Meta:
-        db_table = 'adaptive_questions'
-        verbose_name = 'Adaptive Question'
-        verbose_name_plural = 'Adaptive Questions'
-        indexes = [
-            models.Index(fields=['skill_id']),
-            models.Index(fields=['fundamental_type']),
-            models.Index(fields=['difficulty']),
-            models.Index(fields=['subject', 'level']),  # For subject-wise level filtering
-            models.Index(fields=['subject', 'difficulty_level']),  # For subject-wise difficulty filtering
-            models.Index(fields=['difficulty_level']),
-        ]
-
-
-class Interaction(models.Model):
-    ASSESSMENT_MODES = [
-        ('EXAM', 'Exam Mode - No AI Help'),
-        ('PRACTICE', 'Practice Mode - AI Assistance Available'),
-    ]
-    
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
-    # Foreign Keys
-    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='interactions')
-    question = models.ForeignKey(AdaptiveQuestion, on_delete=models.CASCADE, related_name='interactions')
-    
-    # Response Data
-    is_correct = models.BooleanField()
-    student_answer = models.TextField()
-    response_time = models.FloatField(help_text="Response time in seconds")
-    hints_used = models.IntegerField(default=0)
-    confidence_level = models.IntegerField(
-        choices=[(1, 'Very Low'), (2, 'Low'), (3, 'Medium'), (4, 'High'), (5, 'Very High')],
-        null=True, blank=True
-    )
-    
-    # Session Information
-    session_id = models.UUIDField(help_text="Study session identifier")
-    attempt_number = models.IntegerField(default=1, help_text="Attempt number for this question")
-    assessment_mode = models.CharField(max_length=10, choices=ASSESSMENT_MODES, default='EXAM', 
-                                     help_text="Assessment mode: EXAM (no AI) or PRACTICE (AI help)")
-    
-    # Context
-    previous_questions = models.JSONField(default=list, blank=True, help_text="Previous questions in session")
-    device_type = models.CharField(max_length=50, blank=True)
-    
-    # AI Assistance Data (only for PRACTICE mode)
-    hints_requested = models.JSONField(default=list, blank=True, help_text="List of hints requested")
-    ai_explanation_viewed = models.BooleanField(default=False, help_text="Whether AI explanation was viewed")
-    
-    # Timestamps
-    timestamp = models.DateTimeField(auto_now_add=True)
-    
-    def __str__(self):
-        return f"Interaction: {self.student.username} - {self.question.question_text[:30]}..."
-    
-    class Meta:
-        db_table = 'interactions'
-        verbose_name = 'Interaction'
-        verbose_name_plural = 'Interactions'
-        indexes = [
-            models.Index(fields=['student', 'timestamp']),
-            models.Index(fields=['question', 'timestamp']),
-            models.Index(fields=['session_id']),
-            models.Index(fields=['is_correct', 'timestamp']),
-        ]
-        ordering = ['-timestamp']
-
-
-class ExamSession(models.Model):
-    """Track complete exam sessions for post-exam analysis"""
-    
-    STATUS_CHOICES = [
-        ('ACTIVE', 'Active Session'),
-        ('COMPLETED', 'Completed Session'),
-        ('ABANDONED', 'Abandoned Session'),
-    ]
-    
-    ASSESSMENT_MODES = [
-        ('EXAM', 'Exam Mode - No AI Help'),
-        ('PRACTICE', 'Practice Mode - AI Assistance Available'),
-    ]
-    
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    
-    # Session Details
-    student = models.ForeignKey(User, on_delete=models.CASCADE, related_name='exam_sessions')
-    subject = models.CharField(max_length=25, choices=AdaptiveQuestion.SUBJECT_CHOICES)
-    assessment_mode = models.CharField(max_length=10, choices=ASSESSMENT_MODES, default='EXAM')
-    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='ACTIVE')
-    
-    # Session Statistics
-    questions_attempted = models.IntegerField(default=0)
-    questions_correct = models.IntegerField(default=0)
-    total_time_spent = models.FloatField(default=0.0, help_text="Total time in seconds")
-    current_difficulty = models.CharField(max_length=15, 
-                                        choices=AdaptiveQuestion.DIFFICULTY_CHOICES, 
-                                        default='very_easy')
-    
-    # BKT Integration
-    initial_mastery_score = models.FloatField(default=0.0)
-    final_mastery_score = models.FloatField(default=0.0)
-    mastery_improvement = models.FloatField(default=0.0)
-    
-    # AI Analysis Status
-    ai_analysis_requested = models.BooleanField(default=False)
-    ai_analysis_completed = models.BooleanField(default=False)
-    ai_analysis_data = models.JSONField(default=dict, blank=True, 
-                                      help_text="Stored AI analysis results")
-    
-    # Timestamps
-    started_at = models.DateTimeField(auto_now_add=True)
-    completed_at = models.DateTimeField(null=True, blank=True)
-    updated_at = models.DateTimeField(auto_now=True)
-    
-    def __str__(self):
-        return f"Exam Session: {self.student.username} - {self.subject} ({self.status})"
-    
-    @property
-    def accuracy_rate(self):
-        """Calculate accuracy rate"""
-        if self.questions_attempted == 0:
-            return 0.0
-        return self.questions_correct / self.questions_attempted
-    
-    @property
-    def duration_minutes(self):
-        """Get duration in minutes"""
-        return self.total_time_spent / 60 if self.total_time_spent else 0
-    
-    def mark_completed(self):
-        """Mark session as completed"""
-        self.status = 'COMPLETED'
-        self.completed_at = timezone.now()
-        self.save()
-    
-    def can_request_ai_analysis(self):
-        """Check if AI analysis can be requested (only for completed exams)"""
-        return self.status == 'COMPLETED' and not self.ai_analysis_completed
-    
-    class Meta:
-        db_table = 'exam_sessions'
-        verbose_name = 'Exam Session'
-        verbose_name_plural = 'Exam Sessions'
-        indexes = [
-            models.Index(fields=['student', 'status']),
-            models.Index(fields=['subject', 'status']),
-            models.Index(fields=['assessment_mode', 'status']),
-            models.Index(fields=['ai_analysis_requested', 'ai_analysis_completed']),
-        ]
-        ordering = ['-started_at']
-
-
-# ==============================================================================
-# ENHANCED EXAM MODELS - PRODUCTION READY
-# ==============================================================================
-
-from decimal import Decimal
 from django.core.validators import MinValueValidator, MaxValueValidator
+from decimal import Decimal
+
+# Import your existing models
+from core.models import StudentProfile
+from assessment.models import AdaptiveQuestion
+from assessment.improved_models import Subject, Chapter
 
 
 class EnhancedExam(models.Model):
@@ -353,13 +83,13 @@ class EnhancedExam(models.Model):
     
     # Content Selection
     subject = models.ForeignKey(
-        'assessment.Subject',
+        Subject,
         on_delete=models.CASCADE,
         related_name='enhanced_exams',
         help_text="Primary subject for this exam"
     )
     chapters = models.ManyToManyField(
-        'assessment.Chapter',
+        Chapter,
         blank=True,
         related_name='enhanced_exams',
         help_text="Specific chapters (if not full subject)"
@@ -485,7 +215,7 @@ class StudentExamAttempt(models.Model):
     
     # Foreign Key Relationships - MAIN INTEGRATION POINTS
     student_profile = models.ForeignKey(
-        'core.StudentProfile',
+        StudentProfile,
         on_delete=models.CASCADE,
         related_name='enhanced_exam_attempts',
         help_text="Link to student profile (UUID-based)"
@@ -795,7 +525,7 @@ class ExamQuestionAttempt(models.Model):
         ordering = ['exam_attempt', 'question_number']
 
 
-class EnhancedExamAnalytics(models.Model):
+class ExamAnalytics(models.Model):
     """Pre-computed Analytics for Performance"""
     
     ANALYTICS_TYPE = [
@@ -843,12 +573,197 @@ class EnhancedExamAnalytics(models.Model):
         return timezone.now() > self.expires_at
     
     class Meta:
-        db_table = 'enhanced_exam_analytics'
-        verbose_name = 'Enhanced Exam Analytics'
-        verbose_name_plural = 'Enhanced Exam Analytics'
+        db_table = 'exam_analytics'
+        verbose_name = 'Exam Analytics'
+        verbose_name_plural = 'Exam Analytics'
         indexes = [
             models.Index(fields=['exam', 'analytics_type']),
             models.Index(fields=['student', 'analytics_type']),
             models.Index(fields=['computed_at', 'expires_at']),
         ]
         ordering = ['-computed_at']
+
+
+# ==============================================================================
+# UTILITY FUNCTIONS FOR COMMON OPERATIONS
+# ==============================================================================
+
+class ExamDatabaseUtils:
+    """Utility functions for common exam database operations"""
+    
+    @staticmethod
+    def get_student_exam_history(student_username: str, exam_id: str = None):
+        """Get comprehensive exam history for a student"""
+        student = User.objects.get(username=student_username)
+        attempts = StudentExamAttempt.objects.filter(student=student)
+        
+        if exam_id:
+            attempts = attempts.filter(exam_id=exam_id)
+        
+        return attempts.select_related('exam', 'student_profile').order_by('-started_at')
+    
+    @staticmethod
+    def get_exam_performance_summary(exam_id: str):
+        """Get performance summary for an exam"""
+        exam = EnhancedExam.objects.get(id=exam_id)
+        attempts = StudentExamAttempt.objects.filter(
+            exam=exam, 
+            status='COMPLETED'
+        )
+        
+        if not attempts.exists():
+            return None
+        
+        return {
+            'total_attempts': attempts.count(),
+            'average_score': attempts.aggregate(avg=models.Avg('final_score_percentage'))['avg'],
+            'pass_rate': attempts.filter(passed=True).count() / attempts.count() * 100,
+            'average_duration': attempts.aggregate(avg=models.Avg('total_time_spent_seconds'))['avg'] / 60,
+            'completion_rate': attempts.filter(completion_percentage=100).count() / attempts.count() * 100,
+        }
+    
+    @staticmethod
+    def get_question_analytics(question_id: str):
+        """Get analytics for a specific question across all exams"""
+        attempts = ExamQuestionAttempt.objects.filter(question_id=question_id)
+        
+        if not attempts.exists():
+            return None
+        
+        total_attempts = attempts.count()
+        correct_attempts = attempts.filter(is_correct=True).count()
+        
+        return {
+            'total_attempts': total_attempts,
+            'success_rate': correct_attempts / total_attempts * 100,
+            'average_time': attempts.aggregate(avg=models.Avg('total_time_spent_seconds'))['avg'],
+            'difficulty_perception': attempts.exclude(
+                difficulty_rating__isnull=True
+            ).aggregate(avg=models.Avg('difficulty_rating'))['avg'],
+            'confidence_level': attempts.exclude(
+                confidence_level__isnull=True
+            ).aggregate(avg=models.Avg('confidence_level'))['avg'],
+        }
+    
+    @staticmethod
+    def create_exam_from_template(exam_data: dict, admin_user: User):
+        """Create a new exam from template data"""
+        exam = EnhancedExam.objects.create(
+            created_by=admin_user,
+            **exam_data
+        )
+        return exam
+    
+    @staticmethod
+    def start_exam_attempt(student_username: str, exam_id: str):
+        """Start a new exam attempt for a student"""
+        student = User.objects.get(username=student_username)
+        student_profile = StudentProfile.objects.get(user=student)
+        exam = EnhancedExam.objects.get(id=exam_id)
+        
+        # Check attempt limits
+        existing_attempts = StudentExamAttempt.objects.filter(
+            student=student,
+            exam=exam
+        ).count()
+        
+        if existing_attempts >= exam.max_attempts_per_student:
+            raise ValueError("Maximum attempts exceeded")
+        
+        # Create new attempt
+        attempt = StudentExamAttempt.objects.create(
+            student_profile=student_profile,
+            student=student,
+            exam=exam,
+            attempt_number=existing_attempts + 1,
+            total_questions=exam.total_questions,
+            status='IN_PROGRESS',
+            started_at=timezone.now()
+        )
+        
+        return attempt
+
+
+# ==============================================================================
+# SAMPLE USAGE AND MIGRATION GUIDE
+# ==============================================================================
+
+"""
+MIGRATION INSTRUCTIONS:
+======================
+
+1. Add these models to your app's models.py:
+   - Copy the model classes above
+   - Ensure imports are correct for your project structure
+
+2. Create and run migrations:
+   python manage.py makemigrations
+   python manage.py migrate
+
+3. Create admin interface (optional):
+   # In admin.py
+   from django.contrib import admin
+   from .models import EnhancedExam, StudentExamAttempt, ExamQuestionAttempt
+   
+   admin.site.register(EnhancedExam)
+   admin.site.register(StudentExamAttempt)
+   admin.site.register(ExamQuestionAttempt)
+
+4. Start using the models:
+   # Create an exam
+   exam = EnhancedExam.objects.create(
+       exam_name="Sample Test",
+       exam_code="TEST001",
+       created_by=admin_user,
+       subject=subject_obj,
+       total_questions=50,
+       duration_minutes=90
+   )
+   
+   # Start student attempt
+   attempt = ExamDatabaseUtils.start_exam_attempt("student_username", exam.id)
+   
+   # Record question attempt
+   question_attempt = ExamQuestionAttempt.objects.create(
+       exam_attempt=attempt,
+       question=question_obj,
+       student=student_user,
+       question_number=1,
+       student_answer="a",
+       correct_answer="a",
+       is_correct=True
+   )
+
+DATABASE PERFORMANCE NOTES:
+===========================
+
+1. Indexes are optimized for common query patterns
+2. Use select_related() for foreign key queries
+3. Use prefetch_related() for reverse foreign keys
+4. Consider read replicas for analytics queries
+5. Partition large tables by date if needed
+
+ANALYTICS READY:
+===============
+
+The schema supports:
+- Real-time student performance tracking
+- Exam difficulty analysis
+- Question effectiveness metrics
+- Learning pattern analysis
+- Comparative performance reports
+- Predictive analytics for student success
+
+SECURITY FEATURES:
+=================
+
+- Integrity violation tracking
+- Session monitoring
+- Browser event logging
+- IP address tracking
+- Suspicious activity detection
+- Exam security validation
+
+This schema is production-ready and scales to millions of exam attempts
+while maintaining query performance and data integrity.
+"""

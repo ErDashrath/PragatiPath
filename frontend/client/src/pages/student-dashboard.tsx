@@ -12,10 +12,15 @@ import ReportsView from "@/components/student/personal-reports-view";
 import { AssessmentHistory } from "@/components/student/assessment-history";
 import { DetailedResultView } from "@/components/student/detailed-result-view";
 import AdaptiveLearningInterface from "@/components/student/adaptive-learning-interface";
+import ScheduledExamsView from "@/components/student/scheduled-exams-view";
+import TimedExamInterface from "@/components/student/timed-exam-interface";
+import DynamicExamInterface from "@/components/student/dynamic-exam-interface";
+import EnhancedExamSelector from "@/components/student/enhanced-exam-selector";
+import ExamDebugComponent from "@/components/debug/exam-debug";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { type Subject, type Chapter, type AssessmentResult } from "@/lib/assessment-api";
 
-type StudentView = 'dashboard' | 'modules' | 'chapter' | 'assessment' | 'practice' | 'reports' | 'history' | 'historyDetail' | 'adaptive';
+type StudentView = 'dashboard' | 'modules' | 'chapter' | 'assessment' | 'practice' | 'reports' | 'history' | 'historyDetail' | 'adaptive' | 'exams' | 'timedExam' | 'debug' | 'enhancedExams' | 'dynamicExam';
 
 interface AssessmentConfig {
   questionCount: number;
@@ -32,6 +37,14 @@ export default function StudentDashboard() {
   const [assessmentResult, setAssessmentResult] = useState<AssessmentResult | null>(null);
   const [selectedAssessmentId, setSelectedAssessmentId] = useState<string | null>(null);
   const [assessmentConfig, setAssessmentConfig] = useState<AssessmentConfig>({ questionCount: 10, timeLimit: 15 });
+  // Enhanced exam state
+  const [currentDynamicExam, setCurrentDynamicExam] = useState<{
+    type: 'adaptive_subject' | 'practice_chapter' | 'scheduled_exam';
+    id: string;
+    name: string;
+  } | null>(null);
+  const [currentExamSessionId, setCurrentExamSessionId] = useState<string | null>(null);
+  const [currentExamName, setCurrentExamName] = useState<string>('');
 
   useEffect(() => {
     if (user?.userType === 'admin') {
@@ -77,8 +90,54 @@ export default function StudentDashboard() {
     setCurrentView('historyDetail');
   };
 
+  const handleStartExam = (examSessionId: string, examName: string) => {
+    setCurrentExamSessionId(examSessionId);
+    setCurrentExamName(examName);
+    setCurrentView('timedExam');
+  };
+
+  // Enhanced exam handlers
+  const handleStartDynamicExam = (
+    examType: 'adaptive_subject' | 'practice_chapter' | 'scheduled_exam',
+    examId: string,
+    examName: string
+  ) => {
+    setCurrentDynamicExam({ type: examType, id: examId, name: examName });
+    setCurrentView('dynamicExam');
+  };
+
+  const handleDynamicExamComplete = (results: any) => {
+    console.log('Dynamic exam completed:', results);
+    // Store results, show completion screen, etc.
+    setCurrentView('enhancedExams');
+    setCurrentDynamicExam(null);
+  };
+
+  const handleDynamicExamExit = () => {
+    setCurrentView('enhancedExams');
+    setCurrentDynamicExam(null);
+  };
+
+  const handleExamComplete = (sessionId: string, results: any) => {
+    // Handle exam completion - could show results or redirect
+    console.log('Exam completed:', sessionId, results);
+    setCurrentView('exams'); // Return to exam list
+    setCurrentExamSessionId(null);
+    setCurrentExamName('');
+  };
+
+  const handleExamExit = () => {
+    // Handle exam exit
+    setCurrentView('exams');
+    setCurrentExamSessionId(null);
+    setCurrentExamName('');
+  };
+
   const navigationItems = [
     { key: 'dashboard', label: 'Dashboard', active: currentView === 'dashboard' },
+    { key: 'enhancedExams', label: '🚀 Enhanced Exams', active: currentView === 'enhancedExams' || currentView === 'dynamicExam' },
+    { key: 'exams', label: 'Scheduled Exams ⏰', active: currentView === 'exams' || currentView === 'timedExam' },
+    { key: 'debug', label: '🧪 Exam Debug', active: currentView === 'debug' },
     { key: 'adaptive', label: 'Adaptive Learning 🧠', active: currentView === 'adaptive' },
     { key: 'modules', label: 'Modules', active: currentView === 'modules' || currentView === 'chapter' },
     { key: 'history', label: 'History', active: currentView === 'history' },
@@ -206,6 +265,34 @@ export default function StudentDashboard() {
             sessionId={selectedAssessmentId}
             studentUsername={user?.username || ''}
             onBack={() => setCurrentView('history')}
+          />
+        )}
+        {currentView === 'exams' && (
+          <ScheduledExamsView onStartExam={handleStartExam} />
+        )}
+        {currentView === 'debug' && (
+          <ExamDebugComponent />
+        )}
+        {currentView === 'enhancedExams' && (
+          <EnhancedExamSelector 
+            onStartExam={handleStartDynamicExam}
+            onViewScheduled={() => setCurrentView('exams')}
+          />
+        )}
+        {currentView === 'dynamicExam' && currentDynamicExam && (
+          <DynamicExamInterface
+            examType={currentDynamicExam.type}
+            examId={currentDynamicExam.id}
+            onExamComplete={handleDynamicExamComplete}
+            onExamExit={handleDynamicExamExit}
+          />
+        )}
+        {currentView === 'timedExam' && currentExamSessionId && (
+          <TimedExamInterface
+            sessionId={currentExamSessionId}
+            examName={currentExamName}
+            onExamComplete={handleExamComplete}
+            onExamExit={handleExamExit}
           />
         )}
         {currentView === 'reports' && (

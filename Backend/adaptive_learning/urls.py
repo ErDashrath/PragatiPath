@@ -52,6 +52,12 @@ from practice.api import router as practice_router
 from frontend_api import frontend_router
 from assessment.reports_api import reports_router
 
+# Import exam management API
+from exam_management_api import exam_router
+
+# Import enhanced exam management API (NEW)
+from enhanced_exam_management_api import enhanced_exam_router
+
 # Create the main API instance with enhanced configuration
 api = NinjaAPI(
     title="Adaptive Learning System API",
@@ -81,6 +87,8 @@ api.add_router("/analytics/", analytics_router, tags=["Analytics"])
 api.add_router("/practice/", practice_router, tags=["Practice"])
 api.add_router("/frontend/", frontend_router, tags=["Frontend API"])
 api.add_router("/reports/", reports_router, tags=["Reports & Analytics"])
+api.add_router("/exams/", exam_router, tags=["Exam Management"])
+api.add_router("/enhanced-exam/", enhanced_exam_router, tags=["Enhanced Exam Management"])
 
 @api.get("/health", tags=["System"])
 def health_check(request):

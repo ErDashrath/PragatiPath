@@ -6,9 +6,10 @@ import { GraduationCap, LogOut, Menu } from "lucide-react";
 import AdminOverview from "@/components/admin/admin-overview";
 import StudentsList from "@/components/admin/students-list";
 import EnhancedReportsView from "@/components/admin/enhanced-reports-view";
+import ExamManagement from "@/components/admin/exam-management";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 
-type AdminView = 'overview' | 'students' | 'analytics' | 'reports';
+type AdminView = 'overview' | 'students' | 'exams' | 'analytics' | 'reports';
 
 export default function AdminDashboard() {
   const [, navigate] = useLocation();
@@ -28,6 +29,7 @@ export default function AdminDashboard() {
   const navigationItems = [
     { key: 'overview', label: 'Overview', active: currentView === 'overview' },
     { key: 'students', label: 'Students', active: currentView === 'students' },
+    { key: 'exams', label: 'Exam Management', active: currentView === 'exams' },
     { key: 'analytics', label: 'Analytics', active: currentView === 'analytics' },
     { key: 'reports', label: 'Reports', active: currentView === 'reports' },
   ];
@@ -112,6 +114,7 @@ export default function AdminDashboard() {
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {currentView === 'overview' && <AdminOverview />}
         {currentView === 'students' && <StudentsList />}
+        {currentView === 'exams' && <ExamManagement />}
         {currentView === 'analytics' && (
           <div className="text-center py-12">
             <h2 className="text-2xl font-bold text-foreground mb-4">Analytics Dashboard</h2>

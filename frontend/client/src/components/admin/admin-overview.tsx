@@ -98,6 +98,9 @@ interface FrontendAdminData {
 }
 
 export default function AdminOverview() {
+  // ADMIN DASHBOARD - NOT STUDENT CONTENT
+  console.log("🔧 AdminOverview: Rendering ADMIN content, NOT student content!");
+  
   // Try primary admin endpoints first, fallback to frontend endpoint
   const { data: classOverview, isLoading: overviewLoading, error: overviewError } = useQuery<ClassOverviewResponse>({
     queryKey: ["/api/admin/class-overview"],
@@ -246,9 +249,18 @@ export default function AdminOverview() {
 
   return (
     <div className="space-y-8">
-      <div className="mb-8">
-        <h2 className="text-2xl font-bold text-foreground mb-2">Class Overview</h2>
-        <p className="text-muted-foreground">Monitor class-wide performance and identify learning gaps</p>
+      {/* ADMIN DASHBOARD HEADER - CLEAR IDENTIFICATION */}
+      <div className="mb-8 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-blue-200">
+        <div className="flex items-center gap-3 mb-2">
+          <div className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center">
+            <Users className="h-4 w-4 text-white" />
+          </div>
+          <h2 className="text-2xl font-bold text-foreground">🛠️ Admin Dashboard - Class Management</h2>
+        </div>
+        <p className="text-muted-foreground">Monitor class-wide performance, manage students, and analyze learning patterns</p>
+        <div className="mt-2 text-xs text-blue-600">
+          ✅ This is the ADMIN dashboard - showing class metrics, NOT personal student progress
+        </div>
       </div>
 
       {/* Key Metrics */}
